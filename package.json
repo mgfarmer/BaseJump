@@ -1,0 +1,104 @@
+{
+  "name": "numcpy",
+  "displayName": "NumCpy",
+  "description": "Convert and copy numeric values between bases (hex, decimal, binary, octal)",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "numcpy.convertNumber",
+        "title": "Convert Number"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "numcpy.convertNumber",
+          "group": "navigation",
+          "when": "editorTextFocus"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "NumCpy",
+      "properties": {
+        "numcpy.defaultAction": {
+          "order": 1,
+          "type": "string",
+          "enum": [
+            "copyToClipboard",
+            "replaceInEditor"
+          ],
+          "enumItemLabels": [
+            "Copy to Clipboard",
+            "Replace in Editor"
+          ],
+          "enumDescriptions": [
+            "Copy to Clipboard",
+            "Replace in Editor"
+          ],
+          "markdownEnumDescriptions": [
+            "**Copy to Clipboard** — Selecting a conversion copies the converted value to the clipboard. _(default)_",
+            "**Replace in Editor** — Selecting a conversion replaces the source token in the editor with the converted value."
+          ],
+          "default": "copyToClipboard",
+          "description": "The default action when selecting a conversion from the QuickPick menu."
+        },
+        "numcpy.enableOctal": {
+          "order": 2,
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable octal base in number detection and conversion."
+        },
+        "numcpy.enableBinaryNibbles": {
+          "order": 3,
+          "type": "boolean",
+          "default": true,
+          "description": "When converting to binary, also show a secondary result with nibble separators."
+        },
+        "numcpy.nibbleDelimiter": {
+          "order": 4,
+          "type": "string",
+          "enum": [
+            "underscore",
+            "space",
+            "hyphen",
+            "period"
+          ],
+          "markdownEnumDescriptions": [
+            "**Underscore** `_` — Highly popular in programming languages (Python, Java, C++) because the compiler ignores them, keeping code readable and functional.\n\nExample: `0b1011_0101`",
+            "**Space** — The most common and 'cleanest' way to separate nibbles in documentation or code comments.\n\nExample: `0b1011 0101`",
+            "**Hyphen** `-` — Sometimes seen in hardware manuals or instructional materials to clearly segment the high and low nibbles.\n\nExample: `0b1011-0101`",
+            "**Period** `.` — Occasionally used in networking or specific technical notations, though less common than the underscore in general programming.\n\nExample: `0b1011.0101`"
+          ],
+          "default": "underscore",
+          "description": "Character used to separate nibbles in the binary (nibbles) conversion output."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "yarn run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "yarn run compile && yarn run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "18.x",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  }
+}
