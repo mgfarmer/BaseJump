@@ -2,9 +2,9 @@ import * as vscode from "vscode";
 
 const FAVORITES_KEY = "basejump.favorites";
 
-// --- Nibble delimiter ---
+// --- Delimiter ---
 
-const NIBBLE_DELIMITER_CHARS: Record<string, string> = {
+const DELIMITER_CHARS: Record<string, string> = {
   underscore: "_",
   hyphen: "-",
   space: " ",
@@ -12,9 +12,56 @@ const NIBBLE_DELIMITER_CHARS: Record<string, string> = {
   apostrophe: "'",
 };
 
-function getDelimiterChar(cfg: vscode.WorkspaceConfiguration): string {
-  const key = cfg.get<string>("nibbleDelimiter", "apostrophe");
-  return NIBBLE_DELIMITER_CHARS[key] ?? "'";
+// Language-specific delimiter defaults (used when the user has not set an explicit
+// override for the active document's language).
+// Resolution order: language-level setting → global setting → this map → hardcoded default.
+const LANGUAGE_DELIMITER_DEFAULTS: Record<string, string> = {
+  // C / C++ — apostrophe is the standard digit separator (C++14 / C23)
+  c: "apostrophe",
+  cpp: "apostrophe",
+  // Underscore languages
+  python: "underscore",
+  rust: "underscore",
+  java: "underscore",
+  kotlin: "underscore",
+  swift: "underscore",
+  go: "underscore",
+  vhdl: "underscore",
+  systemverilog: "underscore",
+  verilog: "underscore",
+  // Documentation / prose — spaces read most naturally
+  markdown: "space",
+  plaintext: "space",
+};
+
+function getDelimiterChar(
+  cfg: vscode.WorkspaceConfiguration,
+  languageId?: string,
+): string {
+  const inspection = cfg.inspect<string>("fallbackDelimiter");
+
+  // 1. Per-language [language] block override in settings.json.
+  const hasLanguageOverride =
+    inspection?.globalLanguageValue !== undefined ||
+    inspection?.workspaceLanguageValue !== undefined ||
+    inspection?.workspaceFolderLanguageValue !== undefined;
+
+  if (hasLanguageOverride) {
+    const key = cfg.get<string>("fallbackDelimiter", "apostrophe");
+    return DELIMITER_CHARS[key] ?? "'";
+  }
+
+  // 2. Built-in language defaults.
+  if (languageId) {
+    const langKey = LANGUAGE_DELIMITER_DEFAULTS[languageId.toLowerCase()];
+    if (langKey) {
+      return DELIMITER_CHARS[langKey] ?? "'";
+    }
+  }
+
+  // 3. This setting (global / workspace fallback, or package.json default).
+  const key = cfg.get<string>("fallbackDelimiter", "apostrophe");
+  return DELIMITER_CHARS[key] ?? "'";
 }
 
 // Strip all recognized nibble delimiter characters from a string
@@ -40,6 +87,16 @@ function extractNibbleAwareToken(
   const inlineRange = doc.getWordRangeAtPosition(position, inlineRegex);
   if (inlineRange) {
     return { text: doc.getText(inlineRange), range: inlineRange };
+  }
+
+  // Try custom regex for thousands-delimited decimal (groups of exactly 3 digits)
+  const decThousandsRegex = /\d{1,3}(?:[|'_\-.']\d{3})+/;
+  const decThousandsRange = doc.getWordRangeAtPosition(
+    position,
+    decThousandsRegex,
+  );
+  if (decThousandsRange) {
+    return { text: doc.getText(decThousandsRange), range: decThousandsRange };
   }
 
   // Try custom regex for hex with byte delimiters (0x prefix required)
@@ -219,9 +276,19 @@ function detectValidBases(text: string, enableOctal: boolean): NumberBase[] {
     }
   }
 
-  // Decimal: only pure digit strings
+  // Decimal: pure digit strings, OR thousands-separated form (1'000'000, 1_000_000, etc.).
+  // Thousands form: 1–3 leading digits then groups of exactly 3 digits with a delimiter.
   if (/^[0-9]+$/.test(clean)) {
     validBases.push({ name: "Decimal", base: 10, value: parseInt(clean, 10) });
+  } else if (/^\d{1,3}(?:[|'_\-. ]\d{3})+$/.test(clean)) {
+    const stripped = stripNibbleDelimiters(clean);
+    if (/^[0-9]+$/.test(stripped)) {
+      validBases.push({
+        name: "Decimal",
+        base: 10,
+        value: parseInt(stripped, 10),
+      });
+    }
   }
 
   // Hexadecimal: 0x-prefixed with byte delimiters, 0x-prefix plain, or contains a–f chars.
@@ -259,6 +326,7 @@ const BASE_ORDER = [
   "Binary (nibbles)",
   "Octal",
   "Decimal",
+  "Decimal (thousands)",
   "Hexadecimal",
   "Hexadecimal (bytes)",
 ];
@@ -277,11 +345,26 @@ function toHexBytes(value: number, delimChar: string): string {
   return "0x" + groups.join(delimChar);
 }
 
+function toDecimalThousands(value: number, delimChar: string): string {
+  const s = value.toString(10);
+  if (s.length <= 3) {
+    return s; // no delimiter needed; no-op suppression will hide this target
+  }
+  const groups: string[] = [];
+  let i = s.length;
+  while (i > 0) {
+    groups.unshift(s.slice(Math.max(0, i - 3), i));
+    i -= 3;
+  }
+  return groups.join(delimChar);
+}
+
 function convertToAllBases(
   value: number,
   enableOctal: boolean,
   enableNibbles: boolean,
   enableHexBytes: boolean,
+  enableDecimalThousands: boolean,
   nibbleDelim: string,
 ): Record<string, string> {
   const result: Record<string, string> = {
@@ -298,6 +381,9 @@ function convertToAllBases(
   if (enableHexBytes) {
     result["Hexadecimal (bytes)"] = toHexBytes(value, nibbleDelim);
   }
+  if (enableDecimalThousands) {
+    result["Decimal (thousands)"] = toDecimalThousands(value, nibbleDelim);
+  }
   return result;
 }
 
@@ -308,6 +394,7 @@ function buildItems(
   enableOctal: boolean,
   enableNibbles: boolean,
   enableHexBytes: boolean,
+  enableDecimalThousands: boolean,
   nibbleDelim: string,
   context: vscode.ExtensionContext,
   copyButton: vscode.QuickInputButton,
@@ -329,6 +416,7 @@ function buildItems(
         enableOctal,
         enableNibbles,
         enableHexBytes,
+        enableDecimalThousands,
         nibbleDelim,
       );
     });
@@ -343,16 +431,20 @@ function buildItems(
       if (!enableHexBytes && targetName === "Hexadecimal (bytes)") {
         continue;
       }
-      // For same-name pairs OR cross-pairs within the binary/hex families, only skip
+      if (!enableDecimalThousands && targetName === "Decimal (thousands)") {
+        continue;
+      }
+      // For same-name pairs OR cross-pairs within the binary/hex/decimal families, only skip
       // if the conversion is a true no-op for every token (output === source text).
-      // This lets "Binary → Binary" strip nibble delimiters, "Hex → Hex" strip byte
-      // delimiters, and suppresses family cross-conversions when output already matches.
       const binaryFamily = ["Binary", "Binary (nibbles)"];
       const hexFamily = ["Hexadecimal", "Hexadecimal (bytes)"];
+      const decimalFamily = ["Decimal", "Decimal (thousands)"];
       const sameFamilyCross =
         (binaryFamily.includes(source.name) &&
           binaryFamily.includes(targetName)) ||
-        (hexFamily.includes(source.name) && hexFamily.includes(targetName));
+        (hexFamily.includes(source.name) && hexFamily.includes(targetName)) ||
+        (decimalFamily.includes(source.name) &&
+          decimalFamily.includes(targetName));
       if (targetName === source.name || sameFamilyCross) {
         const anyDiffers = perTokenConversions.some(
           (c, i) => c[targetName] !== tokens[i].text,
@@ -439,6 +531,7 @@ function buildFileConversionItems(
   enableOctal: boolean,
   enableNibbles: boolean,
   enableHexBytes: boolean,
+  enableDecimalThousands: boolean,
   context: vscode.ExtensionContext,
 ): FileConversionItem[] {
   const sourceBases = ["Binary", "Octal", "Decimal", "Hexadecimal"].filter(
@@ -457,11 +550,14 @@ function buildFileConversionItems(
       if (!enableHexBytes && targetName === "Hexadecimal (bytes)") {
         continue;
       }
-      // Allow "Binary → Binary" (strip delimiters) and "Hexadecimal → Hexadecimal"
-      // (strip byte delimiters). Skip all other same-base pairs (always no-ops).
+      if (!enableDecimalThousands && targetName === "Decimal (thousands)") {
+        continue;
+      }
+      // Allow same-base conversions only for types where stripping delimiters is meaningful.
       if (
         targetName === sourceName &&
         sourceName !== "Binary" &&
+        sourceName !== "Decimal" &&
         sourceName !== "Hexadecimal"
       ) {
         continue;
@@ -505,11 +601,10 @@ function scanDocumentForBase(
   enableOctal: boolean,
 ): Array<{ text: string; range: vscode.Range; value: number }> {
   const text = document.getText();
-  // Prefixed forms are tried first (0b, 0x, 0o) so they are not mis-classified
-  // by the bare [0-9a-fA-F]+ fallback. Nibble/byte-delimited forms (|, _, -, ., ')
-  // are also handled for inline-delimiter forms (space-delimited is out of scope).
+  // Thousands-delimited decimal must come before the bare hex fallback to be
+  // tried first. Inline delimiters: |, ', _, -, . (space not matched inline).
   const tokenRegex =
-    /\b(?:0b[01]+(?:[|_\-.'][01]+)*|0x[0-9a-fA-F]+(?:[|_\-.'][0-9a-fA-F]+)*|0o[0-7]+|[0-9a-fA-F]+)\b/gi;
+    /\b(?:0b[01]+(?:[|_\-.'][01]+)*|0x[0-9a-fA-F]+(?:[|_\-.'][0-9a-fA-F]+)*|0o[0-7]+|\d{1,3}(?:[|'_\-.']\d{3})+|[0-9a-fA-F]+)\b/gi;
   const results: Array<{ text: string; range: vscode.Range; value: number }> =
     [];
 
@@ -531,6 +626,69 @@ function scanDocumentForBase(
   }
 
   return results;
+}
+
+/**
+ * Determines what the toggled form of a delimited/plain token should be.
+ * - If the token already has delimiters → return the stripped (plain) form.
+ * - If the token has no delimiters → return the appropriately delimited form.
+ * Returns undefined if the token type doesn't support delimiter toggling (e.g. octal).
+ */
+function toggleDelimitersForToken(
+  text: string,
+  enableOctal: boolean,
+  nibbleDelim: string,
+): string | undefined {
+  const clean = text.trim();
+  const stripped = stripNibbleDelimiters(clean);
+  const hasDelimiters = stripped !== clean;
+
+  // Binary: 0b prefix (with or without delimiters)
+  const cleanBinary = stripped;
+  if (/^0b[01]+$/i.test(cleanBinary)) {
+    const value = parseInt(cleanBinary.slice(2), 2);
+    const reformatted = toBinaryNibbles(value, nibbleDelim);
+    if (hasDelimiters) {
+      return clean === reformatted
+        ? "0b" + value.toString(2) // already correct delimiter → strip
+        : reformatted; // wrong delimiter → switch
+    } else {
+      return reformatted; // add nibble delimiters
+    }
+  }
+
+  // Hexadecimal: 0x prefix required for toggle (avoids ambiguity)
+  if (/^0x[0-9a-f]+$/i.test(cleanBinary)) {
+    const value = parseInt(cleanBinary.slice(2), 16);
+    const reformatted = toHexBytes(value, nibbleDelim);
+    if (hasDelimiters) {
+      return clean === reformatted
+        ? "0x" + value.toString(16).toUpperCase() // already correct delimiter → strip
+        : reformatted; // wrong delimiter → switch
+    } else {
+      return reformatted; // add byte delimiters
+    }
+  }
+
+  // Decimal: pure digits, or thousands-delimited form
+  if (/^[0-9]+$/.test(stripped)) {
+    const value = parseInt(stripped, 10);
+    const reformatted = toDecimalThousands(value, nibbleDelim);
+    if (reformatted === stripped) {
+      return undefined; // value < 1000, no-op
+    }
+    // Thousands form must have proper grouping (1–3 leading + groups of 3)
+    const isThousandsForm = /^\d{1,3}(?:[|'_\-. ]\d{3})+$/.test(clean);
+    if (hasDelimiters && isThousandsForm) {
+      return clean === reformatted
+        ? stripped // already correct delimiter → strip
+        : reformatted; // wrong delimiter → switch
+    } else if (!hasDelimiters) {
+      return reformatted; // add thousands separators
+    }
+  }
+
+  return undefined; // unsupported type (e.g. bare octal)
 }
 
 // --- activate ---
@@ -572,12 +730,19 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       // --- Configuration ---
-      const cfg = vscode.workspace.getConfiguration("basejump");
+      const cfg = vscode.workspace.getConfiguration(
+        "basejump",
+        editor.document,
+      );
       const defaultAction = cfg.get<string>("defaultAction", "replaceInEditor");
       const enableOctal = cfg.get<boolean>("enableOctal", true);
       const enableNibbles = cfg.get<boolean>("enableBinaryNibbles", true);
       const enableHexBytes = cfg.get<boolean>("enableHexBytes", true);
-      const nibbleDelim = getDelimiterChar(cfg);
+      const enableDecimalThousands = cfg.get<boolean>(
+        "enableDecimalThousands",
+        true,
+      );
+      const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
 
       // --- Extract tokens for all cursors/selections ---
       const activeTokens: SelectionToken[] = [];
@@ -639,6 +804,7 @@ export function activate(context: vscode.ExtensionContext) {
         enableOctal,
         enableNibbles,
         enableHexBytes,
+        enableDecimalThousands,
         nibbleDelim,
         context,
         copyButton,
@@ -751,16 +917,24 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const cfg = vscode.workspace.getConfiguration("basejump");
+      const cfg = vscode.workspace.getConfiguration(
+        "basejump",
+        editor.document,
+      );
       const enableOctal = cfg.get<boolean>("enableOctal", true);
       const enableNibbles = cfg.get<boolean>("enableBinaryNibbles", true);
       const enableHexBytes = cfg.get<boolean>("enableHexBytes", true);
-      const nibbleDelim = getDelimiterChar(cfg);
+      const enableDecimalThousands = cfg.get<boolean>(
+        "enableDecimalThousands",
+        true,
+      );
+      const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
 
       const items = buildFileConversionItems(
         enableOctal,
         enableNibbles,
         enableHexBytes,
+        enableDecimalThousands,
         context,
       );
       if (items.length === 0) {
@@ -802,6 +976,7 @@ export function activate(context: vscode.ExtensionContext) {
             enableOctal,
             enableNibbles,
             enableHexBytes,
+            enableDecimalThousands,
             nibbleDelim,
           );
           const converted = conversions[selected.targetBase];
@@ -832,6 +1007,57 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(convertFileDisposable);
+
+  const toggleDelimitersDisposable = vscode.commands.registerCommand(
+    "basejump.toggleDelimiters",
+    async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage("No active editor found");
+        return;
+      }
+
+      const cfg = vscode.workspace.getConfiguration(
+        "basejump",
+        editor.document,
+      );
+      const enableOctal = cfg.get<boolean>("enableOctal", true);
+      const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
+
+      const edits: Array<{ range: vscode.Range; newText: string }> = [];
+      for (const sel of editor.selections) {
+        const extracted = sel.isEmpty
+          ? extractNibbleAwareToken(editor.document, sel.active)
+          : { text: editor.document.getText(sel), range: sel };
+        if (!extracted) {
+          continue;
+        }
+        const toggled = toggleDelimitersForToken(
+          extracted.text,
+          enableOctal,
+          nibbleDelim,
+        );
+        if (toggled !== undefined) {
+          edits.push({ range: extracted.range, newText: toggled });
+        }
+      }
+
+      if (edits.length === 0) {
+        vscode.window.showWarningMessage(
+          "No delimiter-toggleable number found at cursor position",
+        );
+        return;
+      }
+
+      await editor.edit((eb) => {
+        for (const e of edits) {
+          eb.replace(e.range, e.newText);
+        }
+      });
+    },
+  );
+
+  context.subscriptions.push(toggleDelimitersDisposable);
 }
 
 export function deactivate() {

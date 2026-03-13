@@ -15,24 +15,49 @@
     "commands": [
       {
         "command": "basejump.convertNumber",
-        "title": "BaseJump: Convert Number"
+        "category": "BaseJump",
+        "title": "Convert Number"
       },
       {
         "command": "basejump.convertFile",
-        "title": "BaseJump: Convert File"
+        "category": "BaseJump",
+        "title": "Convert File"
+      },
+      {
+        "command": "basejump.toggleDelimiters",
+        "category": "BaseJump",
+        "title": "Toggle Delimiters"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "basejump.submenu",
+        "label": "BaseJump"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "basejump.convertNumber",
+          "submenu": "basejump.submenu",
           "group": "navigation",
           "when": "editorTextFocus"
+        }
+      ],
+      "basejump.submenu": [
+        {
+          "command": "basejump.convertNumber",
+          "title": "Convert Number",
+          "group": "navigation"
         },
         {
           "command": "basejump.convertFile",
-          "group": "navigation",
-          "when": "editorTextFocus"
+          "title": "Convert File",
+          "group": "navigation"
+        },
+        {
+          "command": "basejump.toggleDelimiters",
+          "title": "Toggle Delimiters",
+          "group": "navigation"
         }
       ]
     },
@@ -79,8 +104,15 @@
           "default": true,
           "description": "When converting to hexadecimal, also show a secondary result with byte (two hex digit) separators."
         },
-        "basejump.nibbleDelimiter": {
+        "basejump.enableDecimalThousands": {
           "order": 5,
+          "type": "boolean",
+          "default": true,
+          "description": "When converting to decimal, also show a secondary result with thousands separators (e.g. 1'000'000)."
+        },
+        "basejump.fallbackDelimiter": {
+          "order": 6,
+          "scope": "language-overridable",
           "type": "string",
           "enum": [
             "apostrophe",
@@ -97,7 +129,7 @@
             "**Period** `.` — Occasionally used in networking or specific technical notations, though less common than the underscore in general programming.\n\nExample: `0b1011.0101`"
           ],
           "default": "apostrophe",
-          "description": "Character used to separate groups in Binary (nibbles) and Hexadecimal (bytes) conversion output."
+          "markdownDescription": "Fallback delimiter used to separate digit groups in Binary (nibbles), Hexadecimal (bytes), and Decimal (thousands) output. Only takes effect when no per-language override or built-in language default applies.\n\n**Resolution order:**\n1. Per-language override in your `settings.json` (e.g. `\"[cpp]\": { \"basejump.fallbackDelimiter\": \"apostrophe\" }`)\n2. Built-in language defaults: C/C++ → `'`, Python/Rust/Java/Go/Kotlin/Swift → `_`, Markdown/plain text → space\n3. This setting (global / workspace fallback)"
         }
       }
     }
