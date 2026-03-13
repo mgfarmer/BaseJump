@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 
-const FAVORITES_KEY = "numcpy.favorites";
+const FAVORITES_KEY = "basejump.favorites";
 
 // --- Nibble delimiter ---
 
@@ -125,8 +125,14 @@ interface NumberBase {
   value: number;
 }
 
+interface SelectionToken {
+  text: string;
+  range: vscode.Range;
+  validBases: NumberBase[];
+}
+
 interface ConversionQuickPickItem extends vscode.QuickPickItem {
-  convertedValue: string;
+  convertedValues: string[];
   sourceBase: string;
   targetBase: string;
   conversionKey: string;
@@ -265,7 +271,7 @@ function convertToAllBases(
 // --- QuickPick item builder ---
 
 function buildItems(
-  validBases: NumberBase[],
+  tokens: SelectionToken[],
   enableOctal: boolean,
   enableNibbles: boolean,
   nibbleDelim: string,
@@ -279,13 +285,19 @@ function buildItems(
 ): ConversionQuickPickItem[] {
   const items: ConversionQuickPickItem[] = [];
 
-  for (const source of validBases) {
-    const conversions = convertToAllBases(
-      source.value,
-      enableOctal,
-      enableNibbles,
-      nibbleDelim,
-    );
+  // All tokens share the same valid base names after intersection
+  for (const source of tokens[0].validBases) {
+    // Compute conversions for each token's numeric value in this source base
+    const perTokenConversions = tokens.map((t) => {
+      const tokenBase = t.validBases.find((b) => b.name === source.name)!;
+      return convertToAllBases(
+        tokenBase.value,
+        enableOctal,
+        enableNibbles,
+        nibbleDelim,
+      );
+    });
+
     for (const targetName of BASE_ORDER) {
       if (!enableOctal && targetName === "Octal") {
         continue;
@@ -296,18 +308,26 @@ function buildItems(
       if (targetName === source.name) {
         continue;
       }
-      const converted = conversions[targetName];
-      if (converted === undefined) {
+      const convertedValues = perTokenConversions
+        .map((c) => c[targetName])
+        .filter((v): v is string => v !== undefined);
+      if (convertedValues.length !== tokens.length) {
         continue;
       }
 
       const key = `${source.name}\u2192${targetName}`;
       const fav = isFavorite(context, key);
 
+      // Single token: show the converted value; multi: summary line to keep it readable
+      const label =
+        convertedValues.length === 1
+          ? convertedValues[0]
+          : `Convert ${convertedValues.length} items to ${targetName}`;
+
       items.push({
-        label: converted,
+        label,
         detail: key,
-        convertedValue: converted,
+        convertedValues,
         sourceBase: source.name,
         targetBase: targetName,
         conversionKey: key,
@@ -336,7 +356,7 @@ function buildItems(
 // --- activate ---
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log("NumCpy extension is now active!");
+  console.log("BaseJump extension is now active!");
 
   // Ensure default favorites are seeded on first install
   if (context.globalState.get<string[]>(FAVORITES_KEY) === undefined) {
@@ -363,7 +383,7 @@ export function activate(context: vscode.ExtensionContext) {
   const starButtons = { full: starFull, empty: starEmpty };
 
   const disposable = vscode.commands.registerCommand(
-    "numcpy.convertNumber",
+    "basejump.convertNumber",
     async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
@@ -371,48 +391,70 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      // --- Extract text and range ---
-      let extractedText = "";
-      let textRange: vscode.Range;
-
-      const selection = editor.selection;
-      if (selection.isEmpty) {
-        const extracted = extractNibbleAwareToken(
-          editor.document,
-          selection.active,
-        );
-        if (!extracted) {
-          vscode.window.showWarningMessage("No word found at cursor position");
-          return;
-        }
-        extractedText = extracted.text;
-        textRange = extracted.range;
-      } else {
-        extractedText = editor.document.getText(selection);
-        textRange = selection;
-      }
-
-      console.log("NumCpy extracted text:", extractedText);
-
       // --- Configuration ---
-      const cfg = vscode.workspace.getConfiguration("numcpy");
-      const defaultAction = cfg.get<string>("defaultAction", "copyToClipboard");
+      const cfg = vscode.workspace.getConfiguration("basejump");
+      const defaultAction = cfg.get<string>("defaultAction", "replaceInEditor");
       const enableOctal = cfg.get<boolean>("enableOctal", true);
       const enableNibbles = cfg.get<boolean>("enableBinaryNibbles", true);
       const nibbleDelim = getDelimiterChar(cfg);
 
-      // --- Detect valid bases ---
-      const validBases = detectValidBases(extractedText, enableOctal);
-      if (validBases.length === 0) {
+      // --- Extract tokens for all cursors/selections ---
+      const activeTokens: SelectionToken[] = [];
+      for (const sel of editor.selections) {
+        let text: string;
+        let range: vscode.Range;
+        if (sel.isEmpty) {
+          const extracted = extractNibbleAwareToken(
+            editor.document,
+            sel.active,
+          );
+          if (!extracted) {
+            continue;
+          }
+          text = extracted.text;
+          range = extracted.range;
+        } else {
+          text = editor.document.getText(sel);
+          range = sel;
+        }
+        const bases = detectValidBases(text, enableOctal);
+        if (bases.length > 0) {
+          activeTokens.push({ text, range, validBases: bases });
+        }
+      }
+
+      if (activeTokens.length === 0) {
         vscode.window.showWarningMessage(
-          `"${extractedText}" is not a valid number in any supported base`,
+          "No valid numbers found at cursor positions",
         );
         return;
       }
 
+      // --- Compute intersection of valid base names across all tokens ---
+      let commonBaseNames = activeTokens[0].validBases.map((b) => b.name);
+      for (let i = 1; i < activeTokens.length; i++) {
+        const nameSet = new Set(activeTokens[i].validBases.map((b) => b.name));
+        commonBaseNames = commonBaseNames.filter((n) => nameSet.has(n));
+      }
+
+      if (commonBaseNames.length === 0) {
+        vscode.window.showWarningMessage(
+          "No common numeric base found across all selections",
+        );
+        return;
+      }
+
+      // Filter each token's validBases to only the intersecting names
+      const tokens: SelectionToken[] = activeTokens.map((t) => ({
+        ...t,
+        validBases: t.validBases.filter((b) =>
+          commonBaseNames.includes(b.name),
+        ),
+      }));
+
       // --- Build items ---
-      let items = buildItems(
-        validBases,
+      const items = buildItems(
+        tokens,
         enableOctal,
         enableNibbles,
         nibbleDelim,
@@ -429,14 +471,31 @@ export function activate(context: vscode.ExtensionContext) {
       // --- Helper actions ---
       const activeEditor = editor; // capture for closures
 
-      async function doCopy(value: string) {
-        await vscode.env.clipboard.writeText(value);
-        vscode.window.showInformationMessage(`Copied: ${value}`);
+      async function doCopy(values: string[]) {
+        const clipText = values.join("\n");
+        await vscode.env.clipboard.writeText(clipText);
+        if (values.length === 1) {
+          vscode.window.showInformationMessage(`Copied: ${values[0]}`);
+        } else {
+          vscode.window.showInformationMessage(
+            `Copied ${values.length} values to clipboard`,
+          );
+        }
       }
 
-      function doReplace(value: string) {
-        activeEditor.edit((eb) => eb.replace(textRange, value));
-        vscode.window.showInformationMessage(`Replaced with: ${value}`);
+      function doReplace(values: string[]) {
+        activeEditor.edit((eb) => {
+          for (let i = 0; i < activeTokens.length; i++) {
+            eb.replace(activeTokens[i].range, values[i]);
+          }
+        });
+        if (values.length === 1) {
+          vscode.window.showInformationMessage(`Replaced with: ${values[0]}`);
+        } else {
+          vscode.window.showInformationMessage(
+            `Replaced ${values.length} values`,
+          );
+        }
       }
 
       // --- Build and show QuickPick ---
@@ -445,7 +504,11 @@ export function activate(context: vscode.ExtensionContext) {
         defaultAction === "replaceInEditor"
           ? "Enter replaces in editor  |  [copy] copy  |  [star] toggle favorite"
           : "Enter copies to clipboard  |  [replace] replace  |  [star] toggle favorite";
-      qp.title = `Convert: "${extractedText}" (${validBases.map((b) => b.name).join(", ")})  ·  ${defaultHint}`;
+      const titleSource =
+        tokens.length === 1
+          ? `"${tokens[0].text}"`
+          : `${tokens.length} selections`;
+      qp.title = `Convert: ${titleSource} (${commonBaseNames.join(", ")})  ·  ${defaultHint}`;
       qp.placeholder = "Select a conversion";
       qp.items = items;
 
@@ -453,10 +516,10 @@ export function activate(context: vscode.ExtensionContext) {
       qp.onDidTriggerItemButton(async (e) => {
         const item = e.item;
         if (e.button === copyButton) {
-          await doCopy(item.convertedValue);
+          await doCopy(item.convertedValues);
           qp.hide();
         } else if (e.button === replaceButton) {
-          doReplace(item.convertedValue);
+          doReplace(item.convertedValues);
           qp.hide();
         } else if (e.button === starFull || e.button === starEmpty) {
           const nowFav = await toggleFavorite(context, item.conversionKey);
@@ -483,9 +546,9 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         if (defaultAction === "replaceInEditor") {
-          doReplace(selected.convertedValue);
+          doReplace(selected.convertedValues);
         } else {
-          await doCopy(selected.convertedValue);
+          await doCopy(selected.convertedValues);
         }
         qp.hide();
       });
@@ -499,5 +562,5 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-  console.log("NumCpy extension is now deactivated");
+  console.log("BaseJump extension is now deactivated");
 }

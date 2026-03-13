@@ -1,6 +1,6 @@
 {
-  "name": "numcpy",
-  "displayName": "NumCpy",
+  "name": "basejump",
+  "displayName": "BaseJump",
   "description": "Convert and copy numeric values between bases (hex, decimal, binary, octal)",
   "version": "0.0.1",
   "engines": {
@@ -14,23 +14,23 @@
   "contributes": {
     "commands": [
       {
-        "command": "numcpy.convertNumber",
+        "command": "basejump.convertNumber",
         "title": "Convert Number"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "numcpy.convertNumber",
+          "command": "basejump.convertNumber",
           "group": "navigation",
           "when": "editorTextFocus"
         }
       ]
     },
     "configuration": {
-      "title": "NumCpy",
+      "title": "BaseJump",
       "properties": {
-        "numcpy.defaultAction": {
+        "basejump.defaultAction": {
           "order": 1,
           "type": "string",
           "enum": [
@@ -46,25 +46,25 @@
             "Replace in Editor"
           ],
           "markdownEnumDescriptions": [
-            "**Copy to Clipboard** — Selecting a conversion copies the converted value to the clipboard. _(default)_",
-            "**Replace in Editor** — Selecting a conversion replaces the source token in the editor with the converted value."
+            "**Copy to Clipboard** — Selecting a conversion copies the converted value to the clipboard.",
+            "**Replace in Editor** — Selecting a conversion replaces the source token in the editor with the converted value. _(default)_"
           ],
-          "default": "copyToClipboard",
+          "default": "replaceInEditor",
           "description": "The default action when selecting a conversion from the QuickPick menu."
         },
-        "numcpy.enableOctal": {
+        "basejump.enableOctal": {
           "order": 2,
           "type": "boolean",
           "default": true,
           "description": "Enable or disable octal base in number detection and conversion."
         },
-        "numcpy.enableBinaryNibbles": {
+        "basejump.enableBinaryNibbles": {
           "order": 3,
           "type": "boolean",
           "default": true,
           "description": "When converting to binary, also show a secondary result with nibble separators."
         },
-        "numcpy.nibbleDelimiter": {
+        "basejump.nibbleDelimiter": {
           "order": 4,
           "type": "string",
           "enum": [
