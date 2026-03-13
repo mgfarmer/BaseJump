@@ -15,13 +15,22 @@
     "commands": [
       {
         "command": "basejump.convertNumber",
-        "title": "Convert Number"
+        "title": "BaseJump: Convert Number"
+      },
+      {
+        "command": "basejump.convertFile",
+        "title": "BaseJump: Convert File"
       }
     ],
     "menus": {
       "editor/context": [
         {
           "command": "basejump.convertNumber",
+          "group": "navigation",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "basejump.convertFile",
           "group": "navigation",
           "when": "editorTextFocus"
         }
@@ -64,23 +73,31 @@
           "default": true,
           "description": "When converting to binary, also show a secondary result with nibble separators."
         },
-        "basejump.nibbleDelimiter": {
+        "basejump.enableHexBytes": {
           "order": 4,
+          "type": "boolean",
+          "default": true,
+          "description": "When converting to hexadecimal, also show a secondary result with byte (two hex digit) separators."
+        },
+        "basejump.nibbleDelimiter": {
+          "order": 5,
           "type": "string",
           "enum": [
+            "apostrophe",
             "underscore",
             "space",
             "hyphen",
             "period"
           ],
           "markdownEnumDescriptions": [
-            "**Underscore** `_` — Highly popular in programming languages (Python, Java, C++) because the compiler ignores them, keeping code readable and functional.\n\nExample: `0b1011_0101`",
+            "**Apostrophe** `'` — The official digit separator in C++ (since C++14), Swift, Ruby, and several other languages. Ignored by the compiler.\n\nExample: `0b1011'0101`  |  `0xFF'AA'BB`",
+            "**Underscore** `_` — Highly popular in programming languages (Python, Java, Rust) because the compiler ignores them, keeping code readable and functional.\n\nExample: `0b1011_0101`  |  `0xFF_AA_BB`",
             "**Space** — The most common and 'cleanest' way to separate nibbles in documentation or code comments.\n\nExample: `0b1011 0101`",
             "**Hyphen** `-` — Sometimes seen in hardware manuals or instructional materials to clearly segment the high and low nibbles.\n\nExample: `0b1011-0101`",
             "**Period** `.` — Occasionally used in networking or specific technical notations, though less common than the underscore in general programming.\n\nExample: `0b1011.0101`"
           ],
-          "default": "underscore",
-          "description": "Character used to separate nibbles in the binary (nibbles) conversion output."
+          "default": "apostrophe",
+          "description": "Character used to separate groups in Binary (nibbles) and Hexadecimal (bytes) conversion output."
         }
       }
     }

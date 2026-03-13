@@ -9,16 +9,17 @@ const NIBBLE_DELIMITER_CHARS: Record<string, string> = {
   hyphen: "-",
   space: " ",
   period: ".",
+  apostrophe: "'",
 };
 
 function getDelimiterChar(cfg: vscode.WorkspaceConfiguration): string {
-  const key = cfg.get<string>("nibbleDelimiter", "underscore");
-  return NIBBLE_DELIMITER_CHARS[key] ?? "_";
+  const key = cfg.get<string>("nibbleDelimiter", "apostrophe");
+  return NIBBLE_DELIMITER_CHARS[key] ?? "'";
 }
 
 // Strip all recognized nibble delimiter characters from a string
 function stripNibbleDelimiters(s: string): string {
-  return s.replace(/[|_\-. ]/g, "");
+  return s.replace(/[|_\-. ']/g, "");
 }
 
 /**
@@ -34,11 +35,18 @@ function extractNibbleAwareToken(
   position: vscode.Position,
 ): { text: string; range: vscode.Range } | undefined {
   // Try custom regex: 0b-prefixed or bare, with at least one inline delimiter group
-  // Covers |, _, -, and . (not space — handled below)
-  const inlineRegex = /(?:0b)?[01]+(?:[|_\-.][01]+)+/i;
+  // Covers |, _, -, . and ' (not space — handled below)
+  const inlineRegex = /(?:0b)?[01]+(?:[|_\-.'][01]+)+/i;
   const inlineRange = doc.getWordRangeAtPosition(position, inlineRegex);
   if (inlineRange) {
     return { text: doc.getText(inlineRange), range: inlineRange };
+  }
+
+  // Try custom regex for hex with byte delimiters (0x prefix required)
+  const hexInlineRegex = /0x[0-9a-fA-F]+(?:[|_\-.'][0-9a-fA-F]+)+/i;
+  const hexInlineRange = doc.getWordRangeAtPosition(position, hexInlineRegex);
+  if (hexInlineRange) {
+    return { text: doc.getText(hexInlineRange), range: hexInlineRange };
   }
 
   // Standard word fallback
@@ -138,6 +146,12 @@ interface ConversionQuickPickItem extends vscode.QuickPickItem {
   conversionKey: string;
 }
 
+interface FileConversionItem extends vscode.QuickPickItem {
+  sourceBase: string;
+  targetBase: string;
+  conversionKey: string;
+}
+
 // --- Favorites helpers ---
 
 function getFavorites(context: vscode.ExtensionContext): string[] {
@@ -210,8 +224,15 @@ function detectValidBases(text: string, enableOctal: boolean): NumberBase[] {
     validBases.push({ name: "Decimal", base: 10, value: parseInt(clean, 10) });
   }
 
-  // Hexadecimal: 0x prefix, or contains a–f chars
-  if (/^0x[0-9a-f]+$/i.test(clean)) {
+  // Hexadecimal: 0x-prefixed with byte delimiters, 0x-prefix plain, or contains a–f chars.
+  // Reuse cleanBinary (= stripNibbleDelimiters(clean)) for the delimiter-stripped form.
+  if (hadDelimiter && /^0x[0-9a-f]+$/i.test(cleanBinary)) {
+    validBases.push({
+      name: "Hexadecimal",
+      base: 16,
+      value: parseInt(cleanBinary.slice(2), 16),
+    });
+  } else if (/^0x[0-9a-f]+$/i.test(clean)) {
     validBases.push({
       name: "Hexadecimal",
       base: 16,
@@ -239,6 +260,7 @@ const BASE_ORDER = [
   "Octal",
   "Decimal",
   "Hexadecimal",
+  "Hexadecimal (bytes)",
 ];
 
 function toBinaryNibbles(value: number, delimChar: string): string {
@@ -248,10 +270,18 @@ function toBinaryNibbles(value: number, delimChar: string): string {
   return "0b" + groups.join(delimChar);
 }
 
+function toHexBytes(value: number, delimChar: string): string {
+  const hex = value.toString(16).toUpperCase();
+  const padded = hex.padStart(Math.ceil(hex.length / 2) * 2, "0");
+  const groups = padded.match(/.{2}/g) ?? [padded];
+  return "0x" + groups.join(delimChar);
+}
+
 function convertToAllBases(
   value: number,
   enableOctal: boolean,
   enableNibbles: boolean,
+  enableHexBytes: boolean,
   nibbleDelim: string,
 ): Record<string, string> {
   const result: Record<string, string> = {
@@ -265,6 +295,9 @@ function convertToAllBases(
   if (enableNibbles) {
     result["Binary (nibbles)"] = toBinaryNibbles(value, nibbleDelim);
   }
+  if (enableHexBytes) {
+    result["Hexadecimal (bytes)"] = toHexBytes(value, nibbleDelim);
+  }
   return result;
 }
 
@@ -274,6 +307,7 @@ function buildItems(
   tokens: SelectionToken[],
   enableOctal: boolean,
   enableNibbles: boolean,
+  enableHexBytes: boolean,
   nibbleDelim: string,
   context: vscode.ExtensionContext,
   copyButton: vscode.QuickInputButton,
@@ -294,6 +328,7 @@ function buildItems(
         tokenBase.value,
         enableOctal,
         enableNibbles,
+        enableHexBytes,
         nibbleDelim,
       );
     });
@@ -305,8 +340,26 @@ function buildItems(
       if (!enableNibbles && targetName === "Binary (nibbles)") {
         continue;
       }
-      if (targetName === source.name) {
+      if (!enableHexBytes && targetName === "Hexadecimal (bytes)") {
         continue;
+      }
+      // For same-name pairs OR cross-pairs within the binary/hex families, only skip
+      // if the conversion is a true no-op for every token (output === source text).
+      // This lets "Binary → Binary" strip nibble delimiters, "Hex → Hex" strip byte
+      // delimiters, and suppresses family cross-conversions when output already matches.
+      const binaryFamily = ["Binary", "Binary (nibbles)"];
+      const hexFamily = ["Hexadecimal", "Hexadecimal (bytes)"];
+      const sameFamilyCross =
+        (binaryFamily.includes(source.name) &&
+          binaryFamily.includes(targetName)) ||
+        (hexFamily.includes(source.name) && hexFamily.includes(targetName));
+      if (targetName === source.name || sameFamilyCross) {
+        const anyDiffers = perTokenConversions.some(
+          (c, i) => c[targetName] !== tokens[i].text,
+        );
+        if (!anyDiffers) {
+          continue;
+        }
       }
       const convertedValues = perTokenConversions
         .map((c) => c[targetName])
@@ -340,17 +393,144 @@ function buildItems(
     }
   }
 
-  // Sort: favorites first, then by canonical base order within each group
+  // Sort: favorites first (alpha by source, then BASE_ORDER by target),
+  // then non-favorites grouped alpha by source, BASE_ORDER by target within each group.
   items.sort((a, b) => {
     const aFav = isFavorite(context, a.conversionKey) ? 0 : 1;
     const bFav = isFavorite(context, b.conversionKey) ? 0 : 1;
     if (aFav !== bFav) {
       return aFav - bFav;
     }
+    const sCmp = a.sourceBase.localeCompare(b.sourceBase);
+    if (sCmp !== 0) {
+      return sCmp;
+    }
+    return BASE_ORDER.indexOf(a.targetBase) - BASE_ORDER.indexOf(b.targetBase);
+  });
+
+  // Insert separators between the Favorites group and each source-type group.
+  const withSeparators: ConversionQuickPickItem[] = [];
+  let lastGroup: string | null = null;
+  for (const item of items) {
+    const group = isFavorite(context, item.conversionKey)
+      ? "\u2605 Favorites"
+      : item.sourceBase;
+    if (group !== lastGroup) {
+      withSeparators.push({
+        label: group,
+        kind: vscode.QuickPickItemKind.Separator,
+        convertedValues: [],
+        sourceBase: "",
+        targetBase: "",
+        conversionKey: "",
+        buttons: [],
+      });
+      lastGroup = group;
+    }
+    withSeparators.push(item);
+  }
+
+  return withSeparators;
+}
+
+// --- File conversion helpers ---
+
+function buildFileConversionItems(
+  enableOctal: boolean,
+  enableNibbles: boolean,
+  enableHexBytes: boolean,
+  context: vscode.ExtensionContext,
+): FileConversionItem[] {
+  const sourceBases = ["Binary", "Octal", "Decimal", "Hexadecimal"].filter(
+    (b) => b !== "Octal" || enableOctal,
+  );
+  const items: FileConversionItem[] = [];
+
+  for (const sourceName of sourceBases) {
+    for (const targetName of BASE_ORDER) {
+      if (!enableOctal && targetName === "Octal") {
+        continue;
+      }
+      if (!enableNibbles && targetName === "Binary (nibbles)") {
+        continue;
+      }
+      if (!enableHexBytes && targetName === "Hexadecimal (bytes)") {
+        continue;
+      }
+      // Allow "Binary → Binary" (strip delimiters) and "Hexadecimal → Hexadecimal"
+      // (strip byte delimiters). Skip all other same-base pairs (always no-ops).
+      if (
+        targetName === sourceName &&
+        sourceName !== "Binary" &&
+        sourceName !== "Hexadecimal"
+      ) {
+        continue;
+      }
+      const key = `${sourceName}\u2192${targetName}`;
+      const fav = isFavorite(context, key);
+      items.push({
+        label: (fav ? "$(star-full) " : "") + key,
+        sourceBase: sourceName,
+        targetBase: targetName,
+        conversionKey: key,
+      });
+    }
+  }
+
+  // Sort: favorites first, then by source base order, then by target base order
+  items.sort((a, b) => {
+    const aFav = isFavorite(context, a.conversionKey) ? 0 : 1;
+    const bFav = isFavorite(context, b.conversionKey) ? 0 : 1;
+    if (aFav !== bFav) {
+      return aFav - bFav;
+    }
+    const sCmp =
+      BASE_ORDER.indexOf(a.sourceBase) - BASE_ORDER.indexOf(b.sourceBase);
+    if (sCmp !== 0) {
+      return sCmp;
+    }
     return BASE_ORDER.indexOf(a.targetBase) - BASE_ORDER.indexOf(b.targetBase);
   });
 
   return items;
+}
+
+/**
+ * Scans the entire document for tokens whose detected bases include sourceBaseName.
+ * Uses a broad candidate regex then delegates to detectValidBases for classification.
+ */
+function scanDocumentForBase(
+  document: vscode.TextDocument,
+  sourceBaseName: string,
+  enableOctal: boolean,
+): Array<{ text: string; range: vscode.Range; value: number }> {
+  const text = document.getText();
+  // Prefixed forms are tried first (0b, 0x, 0o) so they are not mis-classified
+  // by the bare [0-9a-fA-F]+ fallback. Nibble/byte-delimited forms (|, _, -, ., ')
+  // are also handled for inline-delimiter forms (space-delimited is out of scope).
+  const tokenRegex =
+    /\b(?:0b[01]+(?:[|_\-.'][01]+)*|0x[0-9a-fA-F]+(?:[|_\-.'][0-9a-fA-F]+)*|0o[0-7]+|[0-9a-fA-F]+)\b/gi;
+  const results: Array<{ text: string; range: vscode.Range; value: number }> =
+    [];
+
+  let match: RegExpExecArray | null;
+  while ((match = tokenRegex.exec(text)) !== null) {
+    const matchText = match[0];
+    const bases = detectValidBases(matchText, enableOctal);
+    const sourceBase = bases.find((b) => b.name === sourceBaseName);
+    if (!sourceBase) {
+      continue;
+    }
+    const startPos = document.positionAt(match.index);
+    const endPos = document.positionAt(match.index + matchText.length);
+    results.push({
+      text: matchText,
+      range: new vscode.Range(startPos, endPos),
+      value: sourceBase.value,
+    });
+  }
+
+  return results;
 }
 
 // --- activate ---
@@ -396,6 +576,7 @@ export function activate(context: vscode.ExtensionContext) {
       const defaultAction = cfg.get<string>("defaultAction", "replaceInEditor");
       const enableOctal = cfg.get<boolean>("enableOctal", true);
       const enableNibbles = cfg.get<boolean>("enableBinaryNibbles", true);
+      const enableHexBytes = cfg.get<boolean>("enableHexBytes", true);
       const nibbleDelim = getDelimiterChar(cfg);
 
       // --- Extract tokens for all cursors/selections ---
@@ -457,6 +638,7 @@ export function activate(context: vscode.ExtensionContext) {
         tokens,
         enableOctal,
         enableNibbles,
+        enableHexBytes,
         nibbleDelim,
         context,
         copyButton,
@@ -559,6 +741,97 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(disposable);
+
+  const convertFileDisposable = vscode.commands.registerCommand(
+    "basejump.convertFile",
+    async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage("No active editor found");
+        return;
+      }
+
+      const cfg = vscode.workspace.getConfiguration("basejump");
+      const enableOctal = cfg.get<boolean>("enableOctal", true);
+      const enableNibbles = cfg.get<boolean>("enableBinaryNibbles", true);
+      const enableHexBytes = cfg.get<boolean>("enableHexBytes", true);
+      const nibbleDelim = getDelimiterChar(cfg);
+
+      const items = buildFileConversionItems(
+        enableOctal,
+        enableNibbles,
+        enableHexBytes,
+        context,
+      );
+      if (items.length === 0) {
+        vscode.window.showInformationMessage("No conversions available");
+        return;
+      }
+
+      const qp = vscode.window.createQuickPick<FileConversionItem>();
+      qp.title =
+        "Convert File — select a conversion to apply to all matching tokens";
+      qp.placeholder = "Select a conversion";
+      qp.items = items;
+
+      qp.onDidAccept(async () => {
+        const [selected] = qp.selectedItems;
+        qp.hide();
+        if (!selected) {
+          return;
+        }
+
+        const matches = scanDocumentForBase(
+          editor.document,
+          selected.sourceBase,
+          enableOctal,
+        );
+
+        if (matches.length === 0) {
+          vscode.window.showInformationMessage(
+            `No matches found for ${selected.conversionKey}`,
+          );
+          return;
+        }
+
+        const wsEdit = new vscode.WorkspaceEdit();
+        let changeCount = 0;
+        for (const m of matches) {
+          const conversions = convertToAllBases(
+            m.value,
+            enableOctal,
+            enableNibbles,
+            enableHexBytes,
+            nibbleDelim,
+          );
+          const converted = conversions[selected.targetBase];
+          // Skip no-op replacements (e.g. plain binary when doing Binary→Binary
+          // on a token that has no delimiters to strip).
+          if (converted !== undefined && converted !== m.text) {
+            wsEdit.replace(editor.document.uri, m.range, converted);
+            changeCount++;
+          }
+        }
+
+        if (changeCount === 0) {
+          vscode.window.showInformationMessage(
+            `No changes needed for ${selected.conversionKey}`,
+          );
+          return;
+        }
+
+        await vscode.workspace.applyEdit(wsEdit);
+        vscode.window.showInformationMessage(
+          `${changeCount} replacement${changeCount === 1 ? "" : "s"} applied (${selected.conversionKey})`,
+        );
+      });
+
+      qp.onDidHide(() => qp.dispose());
+      qp.show();
+    },
+  );
+
+  context.subscriptions.push(convertFileDisposable);
 }
 
 export function deactivate() {
