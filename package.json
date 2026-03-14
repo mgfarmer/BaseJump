@@ -27,6 +27,41 @@
         "command": "basejump.toggleDelimiters",
         "category": "BaseJump",
         "title": "Toggle Delimiters"
+      },
+      {
+        "command": "basejump.convertToBinary",
+        "category": "BaseJump",
+        "title": "Convert to Binary"
+      },
+      {
+        "command": "basejump.convertToBinaryDelimited",
+        "category": "BaseJump",
+        "title": "Convert to Binary (nibbles)"
+      },
+      {
+        "command": "basejump.convertToOctal",
+        "category": "BaseJump",
+        "title": "Convert to Octal"
+      },
+      {
+        "command": "basejump.convertToDecimal",
+        "category": "BaseJump",
+        "title": "Convert to Decimal"
+      },
+      {
+        "command": "basejump.convertToDecimalDelimited",
+        "category": "BaseJump",
+        "title": "Convert to Decimal (thousands)"
+      },
+      {
+        "command": "basejump.convertToHex",
+        "category": "BaseJump",
+        "title": "Convert to Hexadecimal"
+      },
+      {
+        "command": "basejump.convertToHexDelimited",
+        "category": "BaseJump",
+        "title": "Convert to Hexadecimal (bytes)"
       }
     ],
     "submenus": [

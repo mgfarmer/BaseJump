@@ -387,6 +387,89 @@ function convertToAllBases(
   return result;
 }
 
+// --- Direct conversion helpers ---
+
+/** Returns the base family name for a (possibly delimited) target name. */
+function baseFamilyName(targetName: string): string {
+  if (targetName.startsWith("Binary")) return "Binary";
+  if (targetName.startsWith("Decimal")) return "Decimal";
+  if (targetName.startsWith("Hexadecimal")) return "Hexadecimal";
+  return targetName; // "Octal"
+}
+
+/**
+ * Attempt to resolve the source base for a token given a target base family name.
+ * Returns undefined when the source cannot be determined unambiguously.
+ * Disambiguation order:
+ *   1. Unambiguous prefix (0b / 0x / 0o) → immediate answer
+ *   2. detectValidBases (octal always enabled for disambiguation)
+ *   3. Remove target-family candidates
+ *   4. If still multiple, remove Octal
+ *   5. If still multiple → undefined (ambiguous)
+ */
+function resolveSource(
+  text: string,
+  targetFamily: string,
+): NumberBase | undefined {
+  const clean = text.trim();
+  const stripped = stripNibbleDelimiters(clean);
+
+  // Unambiguous prefix checks
+  if (/^0b[01]+$/i.test(stripped)) {
+    return { name: "Binary", base: 2, value: parseInt(stripped.slice(2), 2) };
+  }
+  if (/^0x[0-9a-f]+$/i.test(stripped)) {
+    return {
+      name: "Hexadecimal",
+      base: 16,
+      value: parseInt(stripped.slice(2), 16),
+    };
+  }
+  if (/^0o[0-7]+$/i.test(clean)) {
+    return { name: "Octal", base: 8, value: parseInt(clean.slice(2), 8) };
+  }
+
+  // General disambiguation — always enable octal so we can explicitly eliminate it
+  let candidates = detectValidBases(clean, true);
+
+  // Remove target-family candidates
+  candidates = candidates.filter((c) => c.name !== targetFamily);
+  if (candidates.length === 1) return candidates[0];
+  if (candidates.length === 0) return undefined;
+
+  // Eliminate Octal (rarely the intended source)
+  candidates = candidates.filter((c) => c.name !== "Octal");
+  if (candidates.length === 1) return candidates[0];
+
+  return undefined; // still ambiguous
+}
+
+/** Convert a numeric value to the requested target representation. */
+function convertValueToTarget(
+  value: number,
+  targetName: string,
+  nibbleDelim: string,
+): string | undefined {
+  switch (targetName) {
+    case "Binary":
+      return "0b" + value.toString(2);
+    case "Binary (nibbles)":
+      return toBinaryNibbles(value, nibbleDelim);
+    case "Octal":
+      return "0o" + value.toString(8);
+    case "Decimal":
+      return value.toString(10);
+    case "Decimal (thousands)":
+      return toDecimalThousands(value, nibbleDelim);
+    case "Hexadecimal":
+      return "0x" + value.toString(16).toUpperCase();
+    case "Hexadecimal (bytes)":
+      return toHexBytes(value, nibbleDelim);
+    default:
+      return undefined;
+  }
+}
+
 // --- QuickPick item builder ---
 
 function buildItems(
@@ -689,6 +772,61 @@ function toggleDelimitersForToken(
   }
 
   return undefined; // unsupported type (e.g. bare octal)
+}
+
+// --- Direct convert command ---
+
+async function convertToCommand(targetName: string): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showErrorMessage("No active editor found");
+    return;
+  }
+
+  const cfg = vscode.workspace.getConfiguration("basejump", editor.document);
+  const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
+  const family = baseFamilyName(targetName);
+
+  const edits: Array<{ range: vscode.Range; newText: string }> = [];
+  const ambiguous: string[] = [];
+
+  for (const sel of editor.selections) {
+    const extracted = sel.isEmpty
+      ? extractNibbleAwareToken(editor.document, sel.active)
+      : { text: editor.document.getText(sel), range: sel };
+    if (!extracted) continue;
+
+    const source = resolveSource(extracted.text, family);
+    if (!source) {
+      ambiguous.push(`"${extracted.text.trim()}"`);
+      continue;
+    }
+
+    const converted = convertValueToTarget(
+      source.value,
+      targetName,
+      nibbleDelim,
+    );
+    if (converted === undefined) continue;
+    if (converted === extracted.text.trim()) continue; // silent no-op
+
+    edits.push({ range: extracted.range, newText: converted });
+  }
+
+  if (ambiguous.length > 0) {
+    const list = ambiguous.join(", ");
+    vscode.window.showInformationMessage(
+      `Could not determine source base for ${list} — use Convert Number for manual selection.`,
+    );
+  }
+
+  if (edits.length === 0) return;
+
+  await editor.edit((eb) => {
+    for (const e of edits) {
+      eb.replace(e.range, e.newText);
+    }
+  });
 }
 
 // --- activate ---
@@ -1058,6 +1196,25 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(toggleDelimitersDisposable);
+
+  // Direct convert commands (keyboard-shortcut friendly)
+  const directConvertTargets: { cmd: string; target: string }[] = [
+    { cmd: "basejump.convertToBinary", target: "Binary" },
+    { cmd: "basejump.convertToBinaryDelimited", target: "Binary (nibbles)" },
+    { cmd: "basejump.convertToOctal", target: "Octal" },
+    { cmd: "basejump.convertToDecimal", target: "Decimal" },
+    {
+      cmd: "basejump.convertToDecimalDelimited",
+      target: "Decimal (thousands)",
+    },
+    { cmd: "basejump.convertToHex", target: "Hexadecimal" },
+    { cmd: "basejump.convertToHexDelimited", target: "Hexadecimal (bytes)" },
+  ];
+  for (const { cmd, target } of directConvertTargets) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(cmd, () => convertToCommand(target)),
+    );
+  }
 }
 
 export function deactivate() {
