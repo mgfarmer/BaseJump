@@ -2,6 +2,33 @@
 
 Convert numeric literals between bases directly in the editor. BaseJump detects the base of any number under the cursor, presents all valid conversions in a quick-pick menu, and replaces the token in place — or copies the result to the clipboard.
 
+## AI Disclaimer
+
+- **YES** This extension was 100% vibe coded, including project scafolding, design, implementation, test, and documentation. The only exception might be this **AI Disclaimer** section.
+- **YES** I have 40 years of SW Dev experience that I lean on the Guide the Vibe (tm).
+- **NO** I have not looked at the code...at all.  I might be a hairy scary mess in there but all my tests pass. And I keep the tests up to date.
+- **YES** I wrote this extension primarily for myself and my team at work to help us be more productive because we deal in hex, binary and decimal constants all the time (not so much octal though...)
+
+## Best Practices: Always Prefix Your Numeric Literals
+
+Numeric literals without a base prefix are inherently ambiguous. Consider the value `255`:
+
+- As **decimal**: it's the number two hundred and fifty-five
+- As **hexadecimal**: it represents decimal **597**
+- As **binary**: it would be invalid (contains digits > 1), but `11111111` without a prefix looks like decimal 11,111,111 or hex 286,331,153
+
+When BaseJump encounters a literal without a prefix, it has to guess — or ask. If the value is unambiguously one base (e.g. all `0`s and `1`s could be binary), it may auto-detect. If multiple bases are plausible, it will prompt you to clarify intent before converting. The less ambiguous your input, the cleaner the experience: fewer prompts, a shorter conversion menu, and no second-guessing.
+
+**Recommendation: always use base prefixes.**
+
+| Without prefix | Ambiguous as… | With prefix | Unambiguous |
+|---|---|---|---|
+| `255` | Decimal or Hex | `0xFF` | Hexadecimal |
+| `11111111` | Binary, Decimal, or Hex | `0b11111111` | Binary |
+| `377` | Decimal, Hex, or Octal | `0o377` | Octal |
+
+BaseJump's **Assume Binary** and **Assume Decimal** settings exist to help when you're working with legacy code or pasted values that lack prefixes — but they are workarounds for a problem that prefixes eliminate entirely. When in doubt, prefix it.
+
 ## Features
 
 - **Automatic base detection** — recognizes hexadecimal (`0x`), binary (`0b`), octal (`0o`/leading-zero), and decimal literals, with and without digit-group separators.
