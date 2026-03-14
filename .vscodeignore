@@ -10,3 +10,5 @@ vsc-extension-quickstart.md
 **/*.ts
 yarn.lock
 node_modules/**
+scripts/**
+resources/**
