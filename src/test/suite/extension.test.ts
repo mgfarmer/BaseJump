@@ -322,7 +322,7 @@ suite("Integration – multi-cursor", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Whole-file conversion (basejump.convertFile)
+// Whole-file conversion (basejump.convertEditorContent)
 // ---------------------------------------------------------------------------
 suite("Integration – convertFile", () => {
   /**
@@ -341,7 +341,7 @@ suite("Integration – convertFile", () => {
     });
     await vscode.window.showTextDocument(doc);
     // Execute the command – it shows the QuickPick and completes (QP is now visible)
-    await vscode.commands.executeCommand("basejump.convertFile");
+    await vscode.commands.executeCommand("basejump.convertEditorContent");
     // Accept whichever item is currently highlighted (first = top favorite)
     await vscode.commands.executeCommand(
       "workbench.action.acceptSelectedQuickOpenItem",

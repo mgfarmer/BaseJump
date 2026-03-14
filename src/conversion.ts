@@ -91,12 +91,13 @@ export function detectValidBases(
     }
   }
 
-  // Decimal: pure digit strings, OR thousands-separated form (1'000'000, 1_000_000, etc.).
+  // Decimal: pure digit strings, OR thousands-separated form (1'000'000, 1_000_000, 1,000,000 etc.).
   // Thousands form: 1–3 leading digits then groups of exactly 3 digits with a delimiter.
+  // Comma is accepted as input-only (never output) to handle common US-locale notation.
   if (/^[0-9]+$/.test(clean)) {
     validBases.push({ name: "Decimal", base: 10, value: parseInt(clean, 10) });
-  } else if (/^\d{1,3}(?:[|'_\-. ]\d{3})+$/.test(clean)) {
-    const stripped = stripNibbleDelimiters(clean);
+  } else if (/^\d{1,3}(?:[|'_\-. ,]\d{3})+$/.test(clean)) {
+    const stripped = clean.replace(/[|'_\-. ,]/g, "");
     if (/^[0-9]+$/.test(stripped)) {
       validBases.push({
         name: "Decimal",
@@ -161,6 +162,13 @@ export function toHexBytes(value: number, delimChar: string): string {
 }
 
 export function toDecimalThousands(value: number, delimChar: string): string {
+  // Space makes no sense as a thousands separator in human-readable output —
+  // fall back to the locale's thousands separator (e.g. "," in en-US, "." in de-DE).
+  let effectiveDelim = delimChar;
+  if (delimChar === " ") {
+    // Extract just the separator from a locale-formatted number.
+    effectiveDelim = (1000).toLocaleString().replace(/\d/g, "")[0] ?? ",";
+  }
   const s = value.toString(10);
   if (s.length <= 3) {
     return s; // no delimiter needed; no-op suppression will hide this target
@@ -171,7 +179,7 @@ export function toDecimalThousands(value: number, delimChar: string): string {
     groups.unshift(s.slice(Math.max(0, i - 3), i));
     i -= 3;
   }
-  return groups.join(delimChar);
+  return groups.join(effectiveDelim);
 }
 
 export function convertToAllBases(

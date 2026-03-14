@@ -21,9 +21,9 @@
         "title": "Convert Number"
       },
       {
-        "command": "basejump.convertFile",
+        "command": "basejump.convertEditorContent",
         "category": "BaseJump",
-        "title": "Convert File"
+        "title": "Convert Editor Content"
       },
       {
         "command": "basejump.toggleDelimiters",
@@ -87,8 +87,8 @@
           "group": "navigation"
         },
         {
-          "command": "basejump.convertFile",
-          "title": "Convert File",
+          "command": "basejump.convertEditorContent",
+          "title": "Convert Editor Content",
           "group": "navigation"
         },
         {
@@ -126,14 +126,14 @@
         "basejump.enableOctal": {
           "order": 2,
           "type": "boolean",
-          "default": true,
+          "default": false,
           "markdownDescription": "Include octal in number detection and the **Convert Number** quick-pick. Octal is rarely used outside a few specialised domains (e.g. Unix file permissions) and clutters the quick-pick for most users. Disabling this setting removes octal from the quick-pick and automatic detection, but the explicit **Convert to Octal** command remains available regardless of this setting."
         },
         "basejump.enableDelimitedVariants": {
           "order": 3,
           "type": "boolean",
           "default": true,
-          "markdownDescription": "When enabled, the **Convert Number** quick-pick shows delimited variants alongside plain conversions:\n\n- **Binary (nibbles)** — groups of 4 bits separated by the language delimiter (e.g. `0b1010'1010`)\n- **Hexadecimal (bytes)** — groups of 2 hex digits (e.g. `0xFF'AA`)\n- **Decimal (thousands)** — groups of 3 decimal digits (e.g. `1'000'000`)\n\nDisable this to keep the list shorter when you never use delimited forms. This also controls whether delimited variants appear in the **Convert File** target list."
+          "markdownDescription": "When enabled, the **Convert Number** quick-pick shows delimited variants alongside plain conversions:\n\n- **Binary (nibbles)** — groups of 4 bits separated by the language delimiter (e.g. `0b1010'1010`)\n- **Hexadecimal (bytes)** — groups of 2 hex digits (e.g. `0xFF'AA`)\n- **Decimal (thousands)** — groups of 3 decimal digits (e.g. `1'000'000`)\n\nDisable this to keep the list shorter when you never use delimited forms. This also controls whether delimited variants appear in the **Convert Editor Content** target list."
         },
         "basejump.fallbackDelimiter": {
           "order": 6,
@@ -178,7 +178,7 @@
           "order": 8,
           "type": "boolean",
           "default": true,
-          "markdownDescription": "When enabled _(default)_, all conversions (quick-pick menu, direct commands, and **Convert File**) always produce a prefixed result (e.g. `0b1010`, `0xFF`, `0o17`).\n\nWhen **disabled**, a prefix is only added to the result if the source token itself carried an explicit prefix (`0b`, `0x`, or `0o`). Tokens that were bare (e.g. `255`, `FF`, `1010`) will produce bare results (e.g. `FF`, `11111111`, `255`).\n\n> **Note:** Disabling this increases ambiguity — the converted token may be valid in more than one base system, making it harder for tools (and future BaseJump conversions) to determine its intended base."
+          "markdownDescription": "When enabled _(default)_, all conversions (quick-pick menu, direct commands, and **Convert Editor Content**) always produce a prefixed result (e.g. `0b1010`, `0xFF`, `0o17`).\n\nWhen **disabled**, a prefix is only added to the result if the source token itself carried an explicit prefix (`0b`, `0x`, or `0o`). Tokens that were bare (e.g. `255`, `FF`, `1010`) will produce bare results (e.g. `FF`, `11111111`, `255`).\n\n> **Note:** Disabling this increases ambiguity — the converted token may be valid in more than one base system, making it harder for tools (and future BaseJump conversions) to determine its intended base."
         },
         "basejump.assumeBinaryWithoutPrefix": {
           "order": 9,

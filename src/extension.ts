@@ -67,7 +67,7 @@ function extractNibbleAwareToken(
   }
 
   // Try custom regex for thousands-delimited decimal (groups of exactly 3 digits)
-  const decThousandsRegex = /\d{1,3}(?:[|'_\-.']\d{3})+/;
+  const decThousandsRegex = /\d{1,3}(?:[|'_\-.',]\d{3})+/;
   const decThousandsRange = doc.getWordRangeAtPosition(
     position,
     decThousandsRegex,
@@ -434,9 +434,9 @@ function scanDocumentForBase(
 ): Array<{ text: string; range: vscode.Range; value: number }> {
   const text = document.getText();
   // Thousands-delimited decimal must come before the bare hex fallback to be
-  // tried first. Inline delimiters: |, ', _, -, . (space not matched inline).
+  // tried first. Inline delimiters: |, ', _, -, ., , (comma — input only, not output).
   const tokenRegex =
-    /\b(?:0b[01]+(?:[|_\-.'][01]+)*|0x[0-9a-fA-F]+(?:[|_\-.'][0-9a-fA-F]+)*|0o[0-7]+|\d{1,3}(?:[|'_\-.']\d{3})+|[0-9a-fA-F]+)\b/gi;
+    /\b(?:0b[01]+(?:[|_\-.'][01]+)*|0x[0-9a-fA-F]+(?:[|_\-.'][0-9a-fA-F]+)*|0o[0-7]+|\d{1,3}(?:[|'_\-.',]\d{3})+|[0-9a-fA-F]+)\b/gi;
   const results: Array<{ text: string; range: vscode.Range; value: number }> =
     [];
 
@@ -468,7 +468,7 @@ function scanRangeForTokens(
 ): SelectionToken[] {
   const text = document.getText(range);
   const tokenRegex =
-    /\b(?:0b[01]+(?:[|_\-.'][01]+)*|0x[0-9a-fA-F]+(?:[|_\-.'][0-9a-fA-F]+)*|0o[0-7]+|\d{1,3}(?:[|'_\-.']\d{3})+|[0-9a-fA-F]+)\b/gi;
+    /\b(?:0b[01]+(?:[|_\-.'][01]+)*|0x[0-9a-fA-F]+(?:[|_\-.'][0-9a-fA-F]+)*|0o[0-7]+|\d{1,3}(?:[|'_\-.',]\d{3})+|[0-9a-fA-F]+)\b/gi;
   const results: SelectionToken[] = [];
   const startOffset = document.offsetAt(range.start);
   let match: RegExpExecArray | null;
@@ -645,6 +645,9 @@ async function convertToCommand(targetName: string): Promise<void> {
       eb.replace(e.range, e.newText);
     }
   });
+  if (edits.length > 1) {
+    vscode.window.showInformationMessage(`Converted ${edits.length} tokens`);
+  }
 }
 
 // --- activate ---
@@ -691,7 +694,7 @@ export function activate(context: vscode.ExtensionContext) {
         editor.document,
       );
       const defaultAction = cfg.get<string>("defaultAction", "replaceInEditor");
-      const enableOctal = cfg.get<boolean>("enableOctal", true);
+      const enableOctal = cfg.get<boolean>("enableOctal", false);
       const enableDelimitedVariants = cfg.get<boolean>(
         "enableDelimitedVariants",
         true,
@@ -804,11 +807,9 @@ export function activate(context: vscode.ExtensionContext) {
             eb.replace(activeTokens[i].range, values[i]);
           }
         });
-        if (values.length === 1) {
-          vscode.window.showInformationMessage(`Replaced with: ${values[0]}`);
-        } else {
+        if (values.length > 1) {
           vscode.window.showInformationMessage(
-            `Replaced ${values.length} values`,
+            `Replaced ${values.length} tokens`,
           );
         }
       }
@@ -876,7 +877,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(disposable);
 
   const convertFileDisposable = vscode.commands.registerCommand(
-    "basejump.convertFile",
+    "basejump.convertEditorContent",
     async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
@@ -888,7 +889,7 @@ export function activate(context: vscode.ExtensionContext) {
         "basejump",
         editor.document,
       );
-      const enableOctal = cfg.get<boolean>("enableOctal", true);
+      const enableOctal = cfg.get<boolean>("enableOctal", false);
       const enableDelimitedVariants = cfg.get<boolean>(
         "enableDelimitedVariants",
         true,
@@ -912,7 +913,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const qp = vscode.window.createQuickPick<FileConversionItem>();
       qp.title =
-        "Convert File — select a conversion to apply to all matching tokens";
+        "Convert Editor Content — select a conversion to apply to all matching tokens";
       qp.placeholder = "Select a conversion";
       qp.items = items;
 
