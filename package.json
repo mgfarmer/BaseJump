@@ -127,7 +127,7 @@
           "order": 2,
           "type": "boolean",
           "default": true,
-          "description": "Enable or disable octal base in number detection and conversion."
+          "markdownDescription": "Include octal in number detection and the **Convert Number** quick-pick. Octal is rarely used outside a few specialised domains (e.g. Unix file permissions) and clutters the quick-pick for most users. Disabling this setting removes octal from the quick-pick and automatic detection, but the explicit **Convert to Octal** command remains available regardless of this setting."
         },
         "basejump.enableDelimitedVariants": {
           "order": 3,
