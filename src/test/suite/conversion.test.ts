@@ -5,6 +5,7 @@ import {
   convertToAllBases,
   convertValueToTarget,
   detectValidBases,
+  getDirectCommandCandidates,
   resolveSource,
   stripNibbleDelimiters,
   toBinaryNibbles,
@@ -371,6 +372,66 @@ suite("convertValueToTarget", () => {
 });
 
 // ---------------------------------------------------------------------------
+// convertValueToTarget – addPrefix=false (alwaysPrefixConversions disabled)
+// ---------------------------------------------------------------------------
+suite("convertValueToTarget – addPrefix=false", () => {
+  const DELIM = "'";
+
+  test("Binary: no 0b prefix", () => {
+    assert.strictEqual(
+      convertValueToTarget(10, "Binary", DELIM, false),
+      "1010",
+    );
+  });
+
+  test("Binary (nibbles): prefix stripped, delimiters kept", () => {
+    assert.strictEqual(
+      convertValueToTarget(255, "Binary (nibbles)", DELIM, false),
+      "1111'1111",
+    );
+  });
+
+  test("Octal: no 0o prefix", () => {
+    assert.strictEqual(convertValueToTarget(255, "Octal", DELIM, false), "377");
+  });
+
+  test("Decimal: unchanged (never had a prefix)", () => {
+    assert.strictEqual(
+      convertValueToTarget(255, "Decimal", DELIM, false),
+      "255",
+    );
+  });
+
+  test("Decimal (thousands): unchanged (never had a prefix)", () => {
+    assert.strictEqual(
+      convertValueToTarget(1000000, "Decimal (thousands)", DELIM, false),
+      "1'000'000",
+    );
+  });
+
+  test("Hexadecimal: no 0x prefix", () => {
+    assert.strictEqual(
+      convertValueToTarget(255, "Hexadecimal", DELIM, false),
+      "FF",
+    );
+  });
+
+  test("Hexadecimal (bytes): prefix stripped, delimiters kept", () => {
+    assert.strictEqual(
+      convertValueToTarget(0xaabb, "Hexadecimal (bytes)", DELIM, false),
+      "AA'BB",
+    );
+  });
+
+  test("addPrefix=true produces same output as default", () => {
+    assert.strictEqual(
+      convertValueToTarget(255, "Hexadecimal", DELIM, true),
+      convertValueToTarget(255, "Hexadecimal", DELIM),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // convertToAllBases
 // ---------------------------------------------------------------------------
 suite("convertToAllBases", () => {
@@ -577,3 +638,217 @@ suite("toggleDelimitersForToken – unsupported types", () => {
     assert.strictEqual(toggleDelimitersForToken("0o77", true, "'"), undefined);
   });
 });
+
+// ---------------------------------------------------------------------------
+// getDirectCommandCandidates
+// Helper: extract sorted candidate names from a result
+// ---------------------------------------------------------------------------
+function candidateNames(
+  candidates: ReturnType<typeof getDirectCommandCandidates>,
+): string[] {
+  return candidates.map((c) => c.name);
+}
+
+// --- Explicit prefix: settings are irrelevant, always single candidate ---
+suite("getDirectCommandCandidates – explicit prefix", () => {
+  test("0b prefix → Binary only, value correct", () => {
+    const r = getDirectCommandCandidates("0b1010", false, false);
+    assert.deepStrictEqual(candidateNames(r), ["Binary"]);
+    assert.strictEqual(r[0].value, 10);
+  });
+
+  test("0x prefix → Hexadecimal only, value correct", () => {
+    const r = getDirectCommandCandidates("0xFF", false, false);
+    assert.deepStrictEqual(candidateNames(r), ["Hexadecimal"]);
+    assert.strictEqual(r[0].value, 255);
+  });
+
+  test("0o prefix → Octal only, value correct", () => {
+    const r = getDirectCommandCandidates("0o77", false, false);
+    assert.deepStrictEqual(candidateNames(r), ["Octal"]);
+    assert.strictEqual(r[0].value, 63);
+  });
+
+  test("0b prefix with nibble delimiter → Binary only (delimiter stripped)", () => {
+    const r = getDirectCommandCandidates("0b1010'1010", false, false);
+    assert.deepStrictEqual(candidateNames(r), ["Binary"]);
+    assert.strictEqual(r[0].value, 170);
+  });
+
+  test("0b prefix wins over assumeDecimalWithoutPrefix", () => {
+    const r = getDirectCommandCandidates("0b1010", false, true);
+    assert.deepStrictEqual(candidateNames(r), ["Binary"]);
+  });
+
+  test("0x prefix wins over assumeBinaryWithoutPrefix", () => {
+    const r = getDirectCommandCandidates("0xFF", true, false);
+    assert.deepStrictEqual(candidateNames(r), ["Hexadecimal"]);
+  });
+});
+
+// --- No prefix, both settings false: octal always excluded ---
+suite("getDirectCommandCandidates – no prefix, both settings false", () => {
+  test('"FF" → Hexadecimal only (silent convert)', () => {
+    const r = getDirectCommandCandidates("FF", false, false);
+    assert.deepStrictEqual(candidateNames(r), ["Hexadecimal"]);
+  });
+
+  test('"1234" → Decimal + Hexadecimal (QuickPick)', () => {
+    const r = getDirectCommandCandidates("1234", false, false);
+    assert.ok(r.length > 1, "expected multiple candidates for QuickPick");
+    assert.ok(
+      r.some((c) => c.name === "Decimal"),
+      "Decimal expected",
+    );
+    assert.ok(
+      r.some((c) => c.name === "Hexadecimal"),
+      "Hexadecimal expected",
+    );
+  });
+
+  test('"1010" → Binary + Decimal + Hexadecimal (QuickPick)', () => {
+    const r = getDirectCommandCandidates("1010", false, false);
+    assert.ok(r.length > 1);
+    assert.ok(r.some((c) => c.name === "Binary"));
+    assert.ok(r.some((c) => c.name === "Decimal"));
+    assert.ok(r.some((c) => c.name === "Hexadecimal"));
+  });
+
+  test('"10" → Binary + Decimal + Hexadecimal (QuickPick)', () => {
+    const r = getDirectCommandCandidates("10", false, false);
+    assert.ok(r.length > 1);
+    assert.ok(r.some((c) => c.name === "Binary"));
+    assert.ok(r.some((c) => c.name === "Decimal"));
+    assert.ok(r.some((c) => c.name === "Hexadecimal"));
+  });
+
+  test('"77" → Decimal + Hexadecimal, Octal excluded (QuickPick)', () => {
+    const r = getDirectCommandCandidates("77", false, false);
+    assert.ok(r.length > 1);
+    assert.ok(r.some((c) => c.name === "Decimal"));
+    assert.ok(r.some((c) => c.name === "Hexadecimal"));
+    assert.ok(
+      !r.some((c) => c.name === "Octal"),
+      "Octal must not appear without explicit prefix",
+    );
+  });
+
+  test('"077" legacy octal syntax → Decimal + Hexadecimal, Octal excluded', () => {
+    const r = getDirectCommandCandidates("077", false, false);
+    assert.ok(
+      !r.some((c) => c.name === "Octal"),
+      "Octal must not appear without 0o prefix",
+    );
+  });
+});
+
+// --- assumeDecimalWithoutPrefix=true, assumeBinary=false ---
+suite("getDirectCommandCandidates – assumeDecimal only", () => {
+  test('"1234" (all digits) → Decimal only (silent convert)', () => {
+    const r = getDirectCommandCandidates("1234", false, true);
+    assert.deepStrictEqual(candidateNames(r), ["Decimal"]);
+    assert.strictEqual(r[0].value, 1234);
+  });
+
+  test('"1010" (all digits) → Decimal only, not Binary (silent convert)', () => {
+    const r = getDirectCommandCandidates("1010", false, true);
+    assert.deepStrictEqual(candidateNames(r), ["Decimal"]);
+    assert.strictEqual(r[0].value, 1010);
+  });
+
+  test('"10" (all digits) → Decimal only (silent convert)', () => {
+    const r = getDirectCommandCandidates("10", false, true);
+    assert.deepStrictEqual(candidateNames(r), ["Decimal"]);
+    assert.strictEqual(r[0].value, 10);
+  });
+
+  test('"77" (all digits) → Decimal only (silent convert)', () => {
+    const r = getDirectCommandCandidates("77", false, true);
+    assert.deepStrictEqual(candidateNames(r), ["Decimal"]);
+  });
+
+  test('"FF" (non-decimal chars) → Hexadecimal only, unaffected by setting', () => {
+    const r = getDirectCommandCandidates("FF", false, true);
+    assert.deepStrictEqual(candidateNames(r), ["Hexadecimal"]);
+  });
+
+  test('"1_000_000" (thousands-delimited) → Decimal only (silent convert)', () => {
+    const r = getDirectCommandCandidates("1_000_000", false, true);
+    assert.deepStrictEqual(candidateNames(r), ["Decimal"]);
+    assert.strictEqual(r[0].value, 1000000);
+  });
+});
+
+// --- assumeBinaryWithoutPrefix=true, assumeDecimal=false ---
+suite("getDirectCommandCandidates – assumeBinary only", () => {
+  test('"1010" (all 0/1) → Binary only (silent convert)', () => {
+    const r = getDirectCommandCandidates("1010", true, false);
+    assert.deepStrictEqual(candidateNames(r), ["Binary"]);
+    assert.strictEqual(r[0].value, 10);
+  });
+
+  test('"0110" (all 0/1) → Binary only (silent convert)', () => {
+    const r = getDirectCommandCandidates("0110", true, false);
+    assert.deepStrictEqual(candidateNames(r), ["Binary"]);
+    assert.strictEqual(r[0].value, 6);
+  });
+
+  test('"11" (all 0/1) → Binary only (silent convert)', () => {
+    const r = getDirectCommandCandidates("11", true, false);
+    assert.deepStrictEqual(candidateNames(r), ["Binary"]);
+    assert.strictEqual(r[0].value, 3);
+  });
+
+  test('"1234" (has 2-9 digits) → not all 0/1 → Decimal + Hexadecimal (QuickPick)', () => {
+    const r = getDirectCommandCandidates("1234", true, false);
+    assert.ok(r.length > 1);
+    assert.ok(r.some((c) => c.name === "Decimal"));
+    assert.ok(r.some((c) => c.name === "Hexadecimal"));
+  });
+
+  test('"FF" (not all 0/1) → Hexadecimal only, unaffected by setting', () => {
+    const r = getDirectCommandCandidates("FF", true, false);
+    assert.deepStrictEqual(candidateNames(r), ["Hexadecimal"]);
+  });
+
+  test('"0b1010" explicit prefix wins over assumeBinary rule', () => {
+    // The explicit-prefix path returns early before assumption logic runs.
+    const r = getDirectCommandCandidates("0b1010", true, false);
+    assert.deepStrictEqual(candidateNames(r), ["Binary"]);
+    assert.strictEqual(r[0].value, 10);
+  });
+});
+
+// --- Both settings true: assumeBinary takes precedence for 0/1 tokens ---
+suite(
+  "getDirectCommandCandidates – both assumeBinary and assumeDecimal true",
+  () => {
+    test('"1010" (all 0/1) → Binary wins over Decimal assumption', () => {
+      const r = getDirectCommandCandidates("1010", true, true);
+      assert.deepStrictEqual(candidateNames(r), ["Binary"]);
+      assert.strictEqual(r[0].value, 10);
+    });
+
+    test('"10" (all 0/1) → Binary wins over Decimal assumption', () => {
+      const r = getDirectCommandCandidates("10", true, true);
+      assert.deepStrictEqual(candidateNames(r), ["Binary"]);
+      assert.strictEqual(r[0].value, 2);
+    });
+
+    test('"1234" (not all 0/1, all digits) → Decimal assumption applies', () => {
+      const r = getDirectCommandCandidates("1234", true, true);
+      assert.deepStrictEqual(candidateNames(r), ["Decimal"]);
+      assert.strictEqual(r[0].value, 1234);
+    });
+
+    test('"FF" (neither 0/1 nor pure decimal) → Hexadecimal only, unaffected', () => {
+      const r = getDirectCommandCandidates("FF", true, true);
+      assert.deepStrictEqual(candidateNames(r), ["Hexadecimal"]);
+    });
+
+    test('"77" (not all 0/1, all digits) → Decimal assumption applies', () => {
+      const r = getDirectCommandCandidates("77", true, true);
+      assert.deepStrictEqual(candidateNames(r), ["Decimal"]);
+    });
+  },
+);

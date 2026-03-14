@@ -181,20 +181,23 @@ export function convertToAllBases(
   enableHexBytes: boolean,
   enableDecimalThousands: boolean,
   nibbleDelim: string,
+  addPrefix = true,
 ): Record<string, string> {
   const result: Record<string, string> = {
-    Binary: "0b" + value.toString(2),
+    Binary: (addPrefix ? "0b" : "") + value.toString(2),
     Decimal: value.toString(10),
-    Hexadecimal: "0x" + value.toString(16).toUpperCase(),
+    Hexadecimal: (addPrefix ? "0x" : "") + value.toString(16).toUpperCase(),
   };
   if (enableOctal) {
-    result["Octal"] = "0o" + value.toString(8);
+    result["Octal"] = (addPrefix ? "0o" : "") + value.toString(8);
   }
   if (enableNibbles) {
-    result["Binary (nibbles)"] = toBinaryNibbles(value, nibbleDelim);
+    const s = toBinaryNibbles(value, nibbleDelim);
+    result["Binary (nibbles)"] = addPrefix ? s : s.slice(2);
   }
   if (enableHexBytes) {
-    result["Hexadecimal (bytes)"] = toHexBytes(value, nibbleDelim);
+    const s = toHexBytes(value, nibbleDelim);
+    result["Hexadecimal (bytes)"] = addPrefix ? s : s.slice(2);
   }
   if (enableDecimalThousands) {
     result["Decimal (thousands)"] = toDecimalThousands(value, nibbleDelim);
@@ -264,25 +267,82 @@ export function convertValueToTarget(
   value: number,
   targetName: string,
   nibbleDelim: string,
+  addPrefix = true,
 ): string | undefined {
   switch (targetName) {
     case "Binary":
-      return "0b" + value.toString(2);
-    case "Binary (nibbles)":
-      return toBinaryNibbles(value, nibbleDelim);
+      return (addPrefix ? "0b" : "") + value.toString(2);
+    case "Binary (nibbles)": {
+      const s = toBinaryNibbles(value, nibbleDelim);
+      return addPrefix ? s : s.slice(2);
+    }
     case "Octal":
-      return "0o" + value.toString(8);
+      return (addPrefix ? "0o" : "") + value.toString(8);
     case "Decimal":
       return value.toString(10);
     case "Decimal (thousands)":
       return toDecimalThousands(value, nibbleDelim);
     case "Hexadecimal":
-      return "0x" + value.toString(16).toUpperCase();
-    case "Hexadecimal (bytes)":
-      return toHexBytes(value, nibbleDelim);
+      return (addPrefix ? "0x" : "") + value.toString(16).toUpperCase();
+    case "Hexadecimal (bytes)": {
+      const s = toHexBytes(value, nibbleDelim);
+      return addPrefix ? s : s.slice(2);
+    }
     default:
       return undefined;
   }
+}
+
+/**
+ * For direct conversion commands: determine candidate source bases for a token.
+ *
+ * Rules:
+ * - Explicit prefix (0b / 0x / 0o) → single unambiguous candidate; all others void.
+ * - No explicit prefix → candidates from detectValidBases with octal excluded
+ *   (a bare or legacy-octal token without an explicit 0o prefix is never a candidate).
+ * - When assumeBinaryWithoutPrefix is true, tokens made entirely of 0/1 chars
+ *   (with or without valid nibble delimiters, but no explicit 0b/0x/0o prefix)
+ *   are restricted to Binary only. Takes precedence over assumeDecimalWithoutPrefix.
+ * - When assumeDecimalWithoutPrefix is true, tokens consisting only of decimal
+ *   digits (or thousands-delimited digit groups) are restricted to Decimal only.
+ */
+export function getDirectCommandCandidates(
+  text: string,
+  assumeBinaryWithoutPrefix: boolean,
+  assumeDecimalWithoutPrefix: boolean,
+): NumberBase[] {
+  const clean = text.trim();
+  const stripped = stripNibbleDelimiters(clean);
+
+  // Explicit prefix → single unambiguous candidate.
+  if (/^0b[01]+$/i.test(stripped))
+    return [{ name: "Binary", base: 2, value: parseInt(stripped.slice(2), 2) }];
+  if (/^0x[0-9a-f]+$/i.test(stripped))
+    return [
+      { name: "Hexadecimal", base: 16, value: parseInt(stripped.slice(2), 16) },
+    ];
+  if (/^0o[0-7]+$/i.test(clean))
+    return [{ name: "Octal", base: 8, value: parseInt(clean.slice(2), 8) }];
+
+  // No explicit prefix: detect candidates, always excluding octal.
+  let candidates = detectValidBases(clean, false);
+
+  // assumeBinaryWithoutPrefix takes precedence: a bare 0/1-only token → Binary only.
+  if (assumeBinaryWithoutPrefix && /^[01]+$/.test(stripped)) {
+    const bin = candidates.find((c) => c.name === "Binary");
+    if (bin) return [bin];
+  }
+
+  // When assumeDecimalWithoutPrefix is on, a decimal-looking token is Decimal only.
+  if (assumeDecimalWithoutPrefix) {
+    const isDecimalLooking =
+      /^[0-9]+$/.test(clean) || /^\d{1,3}(?:[|'_\-. ]\d{3})+$/.test(clean);
+    if (isDecimalLooking && candidates.some((c) => c.name === "Decimal")) {
+      candidates = candidates.filter((c) => c.name === "Decimal");
+    }
+  }
+
+  return candidates;
 }
 
 /**

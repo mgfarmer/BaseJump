@@ -257,23 +257,6 @@ suite("Integration – multi-selection", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Ambiguous token – direct command is a no-op
-// ---------------------------------------------------------------------------
-suite("Integration – ambiguous token (no-op)", () => {
-  test('"10" with convertToBinary leaves content unchanged (source ambiguous)', async () => {
-    // "10" could be decimal or hex → resolveSource returns undefined → no edit
-    const content = "10";
-    const result = await runCommandOnContent(
-      content,
-      "cpp",
-      [selectionOf(content, "10")],
-      "basejump.convertToBinary",
-    );
-    assert.strictEqual(result, "10");
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Multi-cursor (empty-selection / cursor-only positions)
 // ---------------------------------------------------------------------------
 suite("Integration – multi-cursor", () => {
@@ -380,5 +363,124 @@ suite("Integration – convertFile", () => {
     // Three decimal values on separate lines
     const result = await runFileConversion("10\n255\n4096", "cpp");
     assert.strictEqual(result, "0xA\n0xFF\n0x1000");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Block-selection handling – convertToDecimal (explicit command)
+// ---------------------------------------------------------------------------
+suite("Integration – block selection, explicit convert command", () => {
+  test("block covering two hex tokens converts both to decimal", async () => {
+    // Select the entire "0xFF 0xAA" span as one selection
+    const content = "0xFF 0xAA";
+    const blockSel = new vscode.Selection(
+      new vscode.Position(0, 0),
+      new vscode.Position(0, content.length),
+    );
+    const result = await runCommandOnContent(
+      content,
+      "cpp",
+      [blockSel],
+      "basejump.convertToDecimal",
+    );
+    assert.strictEqual(result, "255 170");
+  });
+
+  test("block covering mixed hex tokens on multiple lines converts all", async () => {
+    const content = "0xFF\n0xAA\n0x0F";
+    const blockSel = new vscode.Selection(
+      new vscode.Position(0, 0),
+      new vscode.Position(2, 4),
+    );
+    const result = await runCommandOnContent(
+      content,
+      "cpp",
+      [blockSel],
+      "basejump.convertToDecimal",
+    );
+    assert.strictEqual(result, "255\n170\n15");
+  });
+
+  test("block covering three decimal tokens converts all to hex", async () => {
+    const content = "255 170 15";
+    const blockSel = new vscode.Selection(
+      new vscode.Position(0, 0),
+      new vscode.Position(0, content.length),
+    );
+    const result = await runCommandOnContent(
+      content,
+      "cpp",
+      [blockSel],
+      "basejump.convertToHex",
+    );
+    assert.strictEqual(result, "0xFF 0xAA 0xF");
+  });
+
+  test("two separate block selections each converted independently", async () => {
+    // Line 0: "0xFF 0xAA", Line 1: "0x0F 0x01"
+    // Select both lines independently as two separate block selections
+    const content = "0xFF 0xAA\n0x0F 0x01";
+    const sel1 = new vscode.Selection(
+      new vscode.Position(0, 0),
+      new vscode.Position(0, 9),
+    );
+    const sel2 = new vscode.Selection(
+      new vscode.Position(1, 0),
+      new vscode.Position(1, 9),
+    );
+    const result = await runCommandOnContent(
+      content,
+      "cpp",
+      [sel1, sel2],
+      "basejump.convertToDecimal",
+    );
+    assert.strictEqual(result, "255 170\n15 1");
+  });
+
+  test("block selection with non-numeric text between tokens", async () => {
+    // Words between numbers should be ignored; only the numbers converted
+    const content = "val=0xFF; other=0xAA;";
+    const blockSel = new vscode.Selection(
+      new vscode.Position(0, 0),
+      new vscode.Position(0, content.length),
+    );
+    const result = await runCommandOnContent(
+      content,
+      "cpp",
+      [blockSel],
+      "basejump.convertToDecimal",
+    );
+    assert.strictEqual(result, "val=255; other=170;");
+  });
+
+  test("block selection containing a single token works like explicit selection", async () => {
+    const content = "0xFF";
+    const blockSel = new vscode.Selection(
+      new vscode.Position(0, 0),
+      new vscode.Position(0, 4),
+    );
+    const result = await runCommandOnContent(
+      content,
+      "cpp",
+      [blockSel],
+      "basejump.convertToDecimal",
+    );
+    assert.strictEqual(result, "255");
+  });
+
+  test("block selection with no recognisable tokens leaves content unchanged", async () => {
+    const content = "hello world";
+    const blockSel = new vscode.Selection(
+      new vscode.Position(0, 0),
+      new vscode.Position(0, content.length),
+    );
+    const result = await runCommandOnContent(
+      content,
+      "cpp",
+      [blockSel],
+      "basejump.convertToDecimal",
+    );
+    // Command warns but makes no edits
+    assert.strictEqual(result, "hello world");
   });
 });

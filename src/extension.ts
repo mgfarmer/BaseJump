@@ -7,7 +7,7 @@ import {
   detectValidBases,
   convertToAllBases,
   baseFamilyName,
-  resolveSource,
+  getDirectCommandCandidates,
   convertValueToTarget,
   toggleDelimitersForToken,
 } from "./conversion";
@@ -221,14 +221,19 @@ function buildItems(
     full: vscode.QuickInputButton;
     empty: vscode.QuickInputButton;
   },
+  grouping: string,
+  alwaysPrefix: boolean,
 ): ConversionQuickPickItem[] {
   const items: ConversionQuickPickItem[] = [];
 
   // All tokens share the same valid base names after intersection
   for (const source of tokens[0].validBases) {
-    // Compute conversions for each token's numeric value in this source base
+    // Compute conversions for each token's numeric value in this source base.
+    // addPrefix: always true unless setting disabled AND the source token had no explicit prefix.
     const perTokenConversions = tokens.map((t) => {
       const tokenBase = t.validBases.find((b) => b.name === source.name)!;
+      const tokenHasPrefix = /^0[bxo]/i.test(t.text.trim());
+      const addPrefix = alwaysPrefix || tokenHasPrefix;
       return convertToAllBases(
         tokenBase.value,
         enableOctal,
@@ -236,6 +241,7 @@ function buildItems(
         enableHexBytes,
         enableDecimalThousands,
         nibbleDelim,
+        addPrefix,
       );
     });
 
@@ -303,28 +309,36 @@ function buildItems(
     }
   }
 
-  // Sort: favorites first (alpha by source, then BASE_ORDER by target),
-  // then non-favorites grouped alpha by source, BASE_ORDER by target within each group.
+  // Sort: favorites first, then non-favorites. Within each tier, order depends on grouping.
   items.sort((a, b) => {
     const aFav = isFavorite(context, a.conversionKey) ? 0 : 1;
     const bFav = isFavorite(context, b.conversionKey) ? 0 : 1;
     if (aFav !== bFav) {
       return aFav - bFav;
     }
-    const sCmp = a.sourceBase.localeCompare(b.sourceBase);
-    if (sCmp !== 0) {
-      return sCmp;
+    if (grouping === "byTarget") {
+      const tCmp =
+        BASE_ORDER.indexOf(a.targetBase) - BASE_ORDER.indexOf(b.targetBase);
+      if (tCmp !== 0) return tCmp;
+      return a.sourceBase.localeCompare(b.sourceBase);
+    } else {
+      const sCmp = a.sourceBase.localeCompare(b.sourceBase);
+      if (sCmp !== 0) return sCmp;
+      return (
+        BASE_ORDER.indexOf(a.targetBase) - BASE_ORDER.indexOf(b.targetBase)
+      );
     }
-    return BASE_ORDER.indexOf(a.targetBase) - BASE_ORDER.indexOf(b.targetBase);
   });
 
-  // Insert separators between the Favorites group and each source-type group.
+  // Insert separators between the Favorites group and each group.
   const withSeparators: ConversionQuickPickItem[] = [];
   let lastGroup: string | null = null;
   for (const item of items) {
     const group = isFavorite(context, item.conversionKey)
       ? "\u2605 Favorites"
-      : item.sourceBase;
+      : grouping === "byTarget"
+        ? `To ${item.targetBase}`
+        : `From ${item.sourceBase}`;
     if (group !== lastGroup) {
       withSeparators.push({
         label: group,
@@ -446,6 +460,35 @@ function scanDocumentForBase(
   return results;
 }
 
+// --- Scan a selection range for all number tokens ---
+function scanRangeForTokens(
+  document: vscode.TextDocument,
+  range: vscode.Range,
+  enableOctal: boolean,
+): SelectionToken[] {
+  const text = document.getText(range);
+  const tokenRegex =
+    /\b(?:0b[01]+(?:[|_\-.'][01]+)*|0x[0-9a-fA-F]+(?:[|_\-.'][0-9a-fA-F]+)*|0o[0-7]+|\d{1,3}(?:[|'_\-.']\d{3})+|[0-9a-fA-F]+)\b/gi;
+  const results: SelectionToken[] = [];
+  const startOffset = document.offsetAt(range.start);
+  let match: RegExpExecArray | null;
+  while ((match = tokenRegex.exec(text)) !== null) {
+    const matchText = match[0];
+    const bases = detectValidBases(matchText, enableOctal);
+    if (bases.length === 0) continue;
+    const startPos = document.positionAt(startOffset + match.index);
+    const endPos = document.positionAt(
+      startOffset + match.index + matchText.length,
+    );
+    results.push({
+      text: matchText,
+      range: new vscode.Range(startPos, endPos),
+      validBases: bases,
+    });
+  }
+  return results;
+}
+
 // --- Direct convert command ---
 
 async function convertToCommand(targetName: string): Promise<void> {
@@ -457,39 +500,142 @@ async function convertToCommand(targetName: string): Promise<void> {
 
   const cfg = vscode.workspace.getConfiguration("basejump", editor.document);
   const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
+  const assumeDecimal = cfg.get<boolean>("assumeDecimalWithoutPrefix", true);
+  const assumeBinary = cfg.get<boolean>("assumeBinaryWithoutPrefix", true);
+  const alwaysPrefix = cfg.get<boolean>("alwaysPrefixConversions", true);
   const family = baseFamilyName(targetName);
 
-  const edits: Array<{ range: vscode.Range; newText: string }> = [];
-  const ambiguous: string[] = [];
+  // Step 1: Extract tokens and gather source candidates for each selection.
+  interface TokenWithCandidates {
+    text: string;
+    range: vscode.Range;
+    candidates: NumberBase[];
+  }
+  const tokenList: TokenWithCandidates[] = [];
 
   for (const sel of editor.selections) {
-    const extracted = sel.isEmpty
-      ? extractNibbleAwareToken(editor.document, sel.active)
-      : { text: editor.document.getText(sel), range: sel };
-    if (!extracted) continue;
-
-    const source = resolveSource(extracted.text, family);
-    if (!source) {
-      ambiguous.push(`"${extracted.text.trim()}"`);
-      continue;
+    const subTokens: Array<{ text: string; range: vscode.Range }> = [];
+    if (sel.isEmpty) {
+      const extracted = extractNibbleAwareToken(editor.document, sel.active);
+      if (extracted) subTokens.push(extracted);
+    } else {
+      for (const t of scanRangeForTokens(editor.document, sel, true)) {
+        subTokens.push({ text: t.text, range: t.range });
+      }
     }
+    for (const extracted of subTokens) {
+      const raw = getDirectCommandCandidates(
+        extracted.text,
+        assumeBinary,
+        assumeDecimal,
+      );
+      const candidates =
+        raw.length === 1
+          ? raw
+          : raw.filter((c) => baseFamilyName(c.name) !== family);
+      if (candidates.length > 0) {
+        tokenList.push({
+          text: extracted.text,
+          range: extracted.range,
+          candidates,
+        });
+      }
+    }
+  }
 
+  if (tokenList.length === 0) {
+    vscode.window.showWarningMessage(
+      "No valid numbers found at cursor positions",
+    );
+    return;
+  }
+
+  // Step 2: Split into unambiguous (1 candidate) and ambiguous (>1 candidates).
+  interface ResolvedToken {
+    range: vscode.Range;
+    source: NumberBase;
+    text: string;
+  }
+  const resolved: ResolvedToken[] = [];
+  const ambiguous: TokenWithCandidates[] = [];
+
+  for (const t of tokenList) {
+    if (t.candidates.length === 1) {
+      resolved.push({ range: t.range, source: t.candidates[0], text: t.text });
+    } else {
+      ambiguous.push(t);
+    }
+  }
+
+  // Step 3: If any tokens are ambiguous, ask the user once.
+  if (ambiguous.length > 0) {
+    // Union of all candidate bases across ambiguous tokens, deduped and sorted.
+    const seen = new Set<string>();
+    const uniqueCandidates: NumberBase[] = [];
+    for (const t of ambiguous) {
+      for (const c of t.candidates) {
+        if (!seen.has(c.name)) {
+          seen.add(c.name);
+          uniqueCandidates.push(c);
+        }
+      }
+    }
+    uniqueCandidates.sort(
+      (a, b) => BASE_ORDER.indexOf(a.name) - BASE_ORDER.indexOf(b.name),
+    );
+
+    const tokenLabel =
+      ambiguous.length === 1
+        ? `"${ambiguous[0].text.trim()}"`
+        : `${ambiguous.length} tokens`;
+
+    interface BaseItem extends vscode.QuickPickItem {
+      base: NumberBase;
+    }
+    const chosenBase = await new Promise<NumberBase | undefined>((resolve) => {
+      const qp = vscode.window.createQuickPick<BaseItem>();
+      qp.title = `Source base for ${tokenLabel}`;
+      qp.placeholder = "Select the base to convert from";
+      qp.items = uniqueCandidates.map((c) => ({
+        label: c.name,
+        description: `= ${c.value}`,
+        base: c,
+      }));
+      qp.onDidAccept(() => {
+        resolve(qp.selectedItems[0]?.base);
+        qp.dispose();
+      });
+      qp.onDidHide(() => {
+        resolve(undefined);
+        qp.dispose();
+      });
+      qp.show();
+    });
+
+    if (!chosenBase) return; // user dismissed
+
+    for (const t of ambiguous) {
+      const match = t.candidates.find((c) => c.name === chosenBase.name);
+      if (match) {
+        resolved.push({ range: t.range, source: match, text: t.text });
+      }
+    }
+  }
+
+  // Step 4: Convert and collect edits.
+  const edits: Array<{ range: vscode.Range; newText: string }> = [];
+  for (const { range, source, text } of resolved) {
+    const sourceHasPrefix = /^0[bxo]/i.test(text.trim());
+    const addPrefix = alwaysPrefix || sourceHasPrefix;
     const converted = convertValueToTarget(
       source.value,
       targetName,
       nibbleDelim,
+      addPrefix,
     );
     if (converted === undefined) continue;
-    if (converted === extracted.text.trim()) continue; // silent no-op
-
-    edits.push({ range: extracted.range, newText: converted });
-  }
-
-  if (ambiguous.length > 0) {
-    const list = ambiguous.join(", ");
-    vscode.window.showInformationMessage(
-      `Could not determine source base for ${list} — use Convert Number for manual selection.`,
-    );
+    if (converted === text.trim()) continue; // silent no-op
+    edits.push({ range, newText: converted });
   }
 
   if (edits.length === 0) return;
@@ -546,36 +692,45 @@ export function activate(context: vscode.ExtensionContext) {
       );
       const defaultAction = cfg.get<string>("defaultAction", "replaceInEditor");
       const enableOctal = cfg.get<boolean>("enableOctal", true);
-      const enableNibbles = cfg.get<boolean>("enableBinaryNibbles", true);
-      const enableHexBytes = cfg.get<boolean>("enableHexBytes", true);
-      const enableDecimalThousands = cfg.get<boolean>(
-        "enableDecimalThousands",
+      const enableDelimitedVariants = cfg.get<boolean>(
+        "enableDelimitedVariants",
         true,
       );
+      const enableNibbles = enableDelimitedVariants;
+      const enableHexBytes = enableDelimitedVariants;
+      const enableDecimalThousands = enableDelimitedVariants;
       const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
+      const conversionGrouping = cfg.get<string>(
+        "conversionGrouping",
+        "byTarget",
+      );
+      const alwaysPrefix = cfg.get<boolean>("alwaysPrefixConversions", true);
 
       // --- Extract tokens for all cursors/selections ---
       const activeTokens: SelectionToken[] = [];
       for (const sel of editor.selections) {
-        let text: string;
-        let range: vscode.Range;
         if (sel.isEmpty) {
           const extracted = extractNibbleAwareToken(
             editor.document,
             sel.active,
           );
-          if (!extracted) {
-            continue;
+          if (!extracted) continue;
+          const bases = detectValidBases(extracted.text, enableOctal);
+          if (bases.length > 0) {
+            activeTokens.push({
+              text: extracted.text,
+              range: extracted.range,
+              validBases: bases,
+            });
           }
-          text = extracted.text;
-          range = extracted.range;
         } else {
-          text = editor.document.getText(sel);
-          range = sel;
-        }
-        const bases = detectValidBases(text, enableOctal);
-        if (bases.length > 0) {
-          activeTokens.push({ text, range, validBases: bases });
+          for (const token of scanRangeForTokens(
+            editor.document,
+            sel,
+            enableOctal,
+          )) {
+            activeTokens.push(token);
+          }
         }
       }
 
@@ -620,6 +775,8 @@ export function activate(context: vscode.ExtensionContext) {
         copyButton,
         replaceButton,
         starButtons,
+        conversionGrouping,
+        alwaysPrefix,
       );
       if (items.length === 0) {
         vscode.window.showInformationMessage("No conversions available");
@@ -732,14 +889,15 @@ export function activate(context: vscode.ExtensionContext) {
         editor.document,
       );
       const enableOctal = cfg.get<boolean>("enableOctal", true);
-      const enableNibbles = cfg.get<boolean>("enableBinaryNibbles", true);
-      const enableHexBytes = cfg.get<boolean>("enableHexBytes", true);
-      const enableDecimalThousands = cfg.get<boolean>(
-        "enableDecimalThousands",
+      const enableDelimitedVariants = cfg.get<boolean>(
+        "enableDelimitedVariants",
         true,
       );
+      const enableNibbles = enableDelimitedVariants;
+      const enableHexBytes = enableDelimitedVariants;
+      const enableDecimalThousands = enableDelimitedVariants;
       const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
-
+      const alwaysPrefix = cfg.get<boolean>("alwaysPrefixConversions", true);
       const items = buildFileConversionItems(
         enableOctal,
         enableNibbles,
@@ -781,6 +939,8 @@ export function activate(context: vscode.ExtensionContext) {
         const wsEdit = new vscode.WorkspaceEdit();
         let changeCount = 0;
         for (const m of matches) {
+          const tokenHasPrefix = /^0[bxo]/i.test(m.text.trim());
+          const addPrefix = alwaysPrefix || tokenHasPrefix;
           const conversions = convertToAllBases(
             m.value,
             enableOctal,
@@ -788,6 +948,7 @@ export function activate(context: vscode.ExtensionContext) {
             enableHexBytes,
             enableDecimalThousands,
             nibbleDelim,
+            addPrefix,
           );
           const converted = conversions[selected.targetBase];
           // Skip no-op replacements (e.g. plain binary when doing Binary→Binary

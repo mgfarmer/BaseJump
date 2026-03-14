@@ -129,23 +129,11 @@
           "default": true,
           "description": "Enable or disable octal base in number detection and conversion."
         },
-        "basejump.enableBinaryNibbles": {
+        "basejump.enableDelimitedVariants": {
           "order": 3,
           "type": "boolean",
           "default": true,
-          "description": "When converting to binary, also show a secondary result with nibble separators."
-        },
-        "basejump.enableHexBytes": {
-          "order": 4,
-          "type": "boolean",
-          "default": true,
-          "description": "When converting to hexadecimal, also show a secondary result with byte (two hex digit) separators."
-        },
-        "basejump.enableDecimalThousands": {
-          "order": 5,
-          "type": "boolean",
-          "default": true,
-          "description": "When converting to decimal, also show a secondary result with thousands separators (e.g. 1'000'000)."
+          "markdownDescription": "When enabled, the **Convert Number** quick-pick shows delimited variants alongside plain conversions:\n\n- **Binary (nibbles)** — groups of 4 bits separated by the language delimiter (e.g. `0b1010'1010`)\n- **Hexadecimal (bytes)** — groups of 2 hex digits (e.g. `0xFF'AA`)\n- **Decimal (thousands)** — groups of 3 decimal digits (e.g. `1'000'000`)\n\nDisable this to keep the list shorter when you never use delimited forms."
         },
         "basejump.fallbackDelimiter": {
           "order": 6,
@@ -167,6 +155,42 @@
           ],
           "default": "apostrophe",
           "markdownDescription": "Fallback delimiter used to separate digit groups in Binary (nibbles), Hexadecimal (bytes), and Decimal (thousands) output. Only takes effect when no per-language override or built-in language default applies.\n\n**Resolution order:**\n1. Per-language override in your `settings.json` (e.g. `\"[cpp]\": { \"basejump.fallbackDelimiter\": \"apostrophe\" }`)\n2. Built-in language defaults: C/C++ → `'`, Python/Rust/Java/Go/Kotlin/Swift → `_`, Markdown/plain text → space\n3. This setting (global / workspace fallback)"
+        },
+        "basejump.conversionGrouping": {
+          "order": 7,
+          "type": "string",
+          "enum": [
+            "byTarget",
+            "bySource"
+          ],
+          "enumItemLabels": [
+            "By Target",
+            "By Source"
+          ],
+          "markdownEnumDescriptions": [
+            "**By Target** — Group conversions by the destination base (e.g., all conversions _to_ Hexadecimal together). _(default)_",
+            "**By Source** — Group conversions by the source base (e.g., all conversions _from_ Decimal together)."
+          ],
+          "default": "byTarget",
+          "description": "Controls how conversion options are grouped in the Convert Number quick-pick menu."
+        },
+        "basejump.alwaysPrefixConversions": {
+          "order": 8,
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "When enabled _(default)_, direct conversion commands always produce a prefixed result (e.g. `0b1010`, `0xFF`, `0o17`).\n\nWhen **disabled**, a prefix is only added to the result if the source token itself carried an explicit prefix (`0b`, `0x`, or `0o`). Tokens that were bare (e.g. `255`, `FF`, `1010`) will produce bare results (e.g. `FF`, `11111111`, `255`).\n\n> **Note:** Disabling this increases ambiguity — the converted token may be valid in more than one base system, making it harder for tools (and future BaseJump conversions) to determine its intended base."
+        },
+        "basejump.assumeBinaryWithoutPrefix": {
+          "order": 9,
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "When enabled, an unprefixed token made entirely of `0` and `1` characters (with or without nibble delimiters, but no `0b` prefix) is treated as **Binary** and nothing else.\n\nTakes precedence over _Assume Decimal Without Prefix_.\n\nExample: with this enabled, running **Convert to Hex** on `1010` always converts it as binary 1010 → `0xA`, rather than asking whether you meant binary 10, decimal 1010, or hexadecimal 4106."
+        },
+        "basejump.assumeDecimalWithoutPrefix": {
+          "order": 10,
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "When enabled, a numeric token with no explicit base prefix (`0b`/`0x`/`0o`) that consists only of decimal digits — or digit groups with thousands separators — is treated as **Decimal** and nothing else.\n\nThis prevents ambiguous literals like `255` from prompting a source-base picker when using a direct conversion command.\n\nExample: with this enabled, running **Convert to Hex** on `255` always converts it as decimal 255 → `0xFF`, rather than asking whether you meant decimal 255 or hexadecimal 597."
         }
       }
     }
