@@ -12,3 +12,4 @@ yarn.lock
 node_modules/**
 scripts/**
 resources/**
+out/test/**
