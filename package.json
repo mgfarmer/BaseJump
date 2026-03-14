@@ -11,7 +11,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -77,24 +79,42 @@
         {
           "submenu": "basejump.submenu",
           "group": "navigation",
-          "when": "editorTextFocus"
+          "when": "editorTextFocus && basejump.menuLayout != 'topLevel' && basejump.menuLayout != 'none'"
+        },
+        {
+          "command": "basejump.convertNumber",
+          "group": "basejump@1",
+          "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuConvertNumber"
+        },
+        {
+          "command": "basejump.convertEditorContent",
+          "group": "basejump@2",
+          "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuConvertEditorContent"
+        },
+        {
+          "command": "basejump.toggleDelimiters",
+          "group": "basejump@3",
+          "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuToggleDelimiters"
         }
       ],
       "basejump.submenu": [
         {
           "command": "basejump.convertNumber",
           "title": "Convert Number",
-          "group": "navigation"
+          "group": "navigation",
+          "when": "basejump.menuConvertNumber != false"
         },
         {
           "command": "basejump.convertEditorContent",
           "title": "Convert Editor Content",
-          "group": "navigation"
+          "group": "navigation",
+          "when": "basejump.menuConvertEditorContent != false"
         },
         {
           "command": "basejump.toggleDelimiters",
           "title": "Toggle Delimiters",
-          "group": "navigation"
+          "group": "navigation",
+          "when": "basejump.menuToggleDelimiters != false"
         }
       ]
     },
@@ -191,6 +211,45 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "When enabled, a numeric token with no explicit base prefix (`0b`/`0x`/`0o`) that consists only of decimal digits — or digit groups with thousands separators — is treated as **Decimal** and nothing else.\n\nThis prevents ambiguous literals like `255` from prompting a source-base picker.\n\nExample: with this enabled, `255` is always converted as decimal 255 → `0xFF`, whether using a direct command or the **Convert Number** quick-pick — rather than asking whether you meant decimal 255 or hexadecimal 597."
+        },
+        "basejump.contextMenuLayout": {
+          "order": 11,
+          "type": "string",
+          "enum": [
+            "submenu",
+            "topLevel",
+            "none"
+          ],
+          "enumItemLabels": [
+            "Submenu",
+            "Top Level",
+            "None"
+          ],
+          "markdownEnumDescriptions": [
+            "**Submenu** — BaseJump commands appear under a single **BaseJump** submenu in the editor context menu. _(default)_",
+            "**Top Level** — BaseJump commands appear directly in the editor context menu, separated from other items by divider lines.",
+            "**None** — BaseJump does not appear in the editor context menu at all. Use the Command Palette or keyboard shortcuts instead."
+          ],
+          "default": "submenu",
+          "markdownDescription": "Controls how BaseJump commands appear in the editor right-click context menu."
+        },
+        "basejump.menuShowConvertNumber": {
+          "order": 12,
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show the **Convert Number** command in the editor context menu (both submenu and top-level layouts)."
+        },
+        "basejump.menuShowConvertEditorContent": {
+          "order": 13,
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show the **Convert Editor Content** command in the editor context menu (both submenu and top-level layouts)."
+        },
+        "basejump.menuShowToggleDelimiters": {
+          "order": 14,
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show the **Toggle Delimiters** command in the editor context menu (both submenu and top-level layouts)."
         }
       }
     }

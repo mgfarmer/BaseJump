@@ -30,9 +30,6 @@ export const LANGUAGE_DELIMITER_DEFAULTS: Record<string, string> = {
   vhdl: "underscore",
   systemverilog: "underscore",
   verilog: "underscore",
-  // Documentation / prose — spaces read most naturally
-  markdown: "space",
-  plaintext: "space",
 };
 
 // Strip all recognized nibble delimiter characters from a string
@@ -190,6 +187,7 @@ export function convertToAllBases(
   enableDecimalThousands: boolean,
   nibbleDelim: string,
   addPrefix = true,
+  decimalDelimChar = nibbleDelim,
 ): Record<string, string> {
   const result: Record<string, string> = {
     Binary: (addPrefix ? "0b" : "") + value.toString(2),
@@ -208,7 +206,7 @@ export function convertToAllBases(
     result["Hexadecimal (bytes)"] = addPrefix ? s : s.slice(2);
   }
   if (enableDecimalThousands) {
-    result["Decimal (thousands)"] = toDecimalThousands(value, nibbleDelim);
+    result["Decimal (thousands)"] = toDecimalThousands(value, decimalDelimChar);
   }
   return result;
 }
@@ -276,6 +274,7 @@ export function convertValueToTarget(
   targetName: string,
   nibbleDelim: string,
   addPrefix = true,
+  decimalDelimChar = nibbleDelim,
 ): string | undefined {
   switch (targetName) {
     case "Binary":
@@ -289,7 +288,7 @@ export function convertValueToTarget(
     case "Decimal":
       return value.toString(10);
     case "Decimal (thousands)":
-      return toDecimalThousands(value, nibbleDelim);
+      return toDecimalThousands(value, decimalDelimChar);
     case "Hexadecimal":
       return (addPrefix ? "0x" : "") + value.toString(16).toUpperCase();
     case "Hexadecimal (bytes)": {
@@ -363,6 +362,7 @@ export function toggleDelimitersForToken(
   text: string,
   enableOctal: boolean,
   nibbleDelim: string,
+  decimalDelimChar = nibbleDelim,
 ): string | undefined {
   const clean = text.trim();
   const stripped = stripNibbleDelimiters(clean);
@@ -395,20 +395,22 @@ export function toggleDelimitersForToken(
     }
   }
 
-  // Decimal: pure digits, or thousands-delimited form
-  if (/^[0-9]+$/.test(stripped)) {
-    const value = parseInt(stripped, 10);
-    const reformatted = toDecimalThousands(value, nibbleDelim);
-    if (reformatted === stripped) {
+  // Decimal: pure digits, or thousands-delimited form (comma is input-only separator)
+  const decStripped = clean.replace(/[|'_\-. ,]/g, "");
+  const decHasDelimiters = decStripped !== clean;
+  if (/^[0-9]+$/.test(decStripped)) {
+    const value = parseInt(decStripped, 10);
+    const reformatted = toDecimalThousands(value, decimalDelimChar);
+    if (reformatted === decStripped) {
       return undefined; // value < 1000, no-op
     }
     // Thousands form must have proper grouping (1–3 leading + groups of 3)
-    const isThousandsForm = /^\d{1,3}(?:[|'_\-. ]\d{3})+$/.test(clean);
-    if (hasDelimiters && isThousandsForm) {
+    const isThousandsForm = /^\d{1,3}(?:[|'_\-. ,]\d{3})+$/.test(clean);
+    if (decHasDelimiters && isThousandsForm) {
       return clean === reformatted
-        ? stripped // already correct delimiter → strip
+        ? decStripped // already correct delimiter → strip
         : reformatted; // wrong delimiter → switch
-    } else if (!hasDelimiters) {
+    } else if (!decHasDelimiters) {
       return reformatted; // add thousands separators
     }
   }

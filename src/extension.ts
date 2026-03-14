@@ -47,6 +47,37 @@ function getDelimiterChar(
 }
 
 /**
+ * Returns the delimiter to use specifically for decimal thousands output.
+ * For files with no built-in language mapping and no per-language override,
+ * returns " " to trigger the locale-aware separator in toDecimalThousands
+ * (e.g. "," in en-US, "." in European locales) — keeping decimal output
+ * readable without the tokenizer-breaking space used for binary/hex.
+ */
+function getDecimalDelimiterChar(
+  cfg: vscode.WorkspaceConfiguration,
+  languageId?: string,
+): string {
+  const inspection = cfg.inspect<string>("fallbackDelimiter");
+  const hasLanguageOverride =
+    inspection?.globalLanguageValue !== undefined ||
+    inspection?.workspaceLanguageValue !== undefined ||
+    inspection?.workspaceFolderLanguageValue !== undefined;
+
+  // If the user explicitly chose a delimiter for this language, honour it.
+  if (hasLanguageOverride) {
+    return getDelimiterChar(cfg, languageId);
+  }
+
+  // If there's a built-in language mapping, honour it.
+  if (languageId && LANGUAGE_DELIMITER_DEFAULTS[languageId.toLowerCase()]) {
+    return getDelimiterChar(cfg, languageId);
+  }
+
+  // Unmapped language with no override — use the locale's thousands separator for decimal.
+  return (1000).toLocaleString().replace(/\d/g, "")[0] ?? ",";
+}
+
+/**
  * Extracts a potentially nibble-delimited binary token from the document at position.
  *
  * Strategy:
@@ -214,6 +245,7 @@ function buildItems(
   enableHexBytes: boolean,
   enableDecimalThousands: boolean,
   nibbleDelim: string,
+  decimalDelimChar: string,
   context: vscode.ExtensionContext,
   copyButton: vscode.QuickInputButton,
   replaceButton: vscode.QuickInputButton,
@@ -242,6 +274,7 @@ function buildItems(
         enableDecimalThousands,
         nibbleDelim,
         addPrefix,
+        decimalDelimChar,
       );
     });
 
@@ -500,6 +533,10 @@ async function convertToCommand(targetName: string): Promise<void> {
 
   const cfg = vscode.workspace.getConfiguration("basejump", editor.document);
   const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
+  const decimalDelimChar = getDecimalDelimiterChar(
+    cfg,
+    editor.document.languageId,
+  );
   const assumeDecimal = cfg.get<boolean>("assumeDecimalWithoutPrefix", true);
   const assumeBinary = cfg.get<boolean>("assumeBinaryWithoutPrefix", true);
   const alwaysPrefix = cfg.get<boolean>("alwaysPrefixConversions", true);
@@ -632,6 +669,7 @@ async function convertToCommand(targetName: string): Promise<void> {
       targetName,
       nibbleDelim,
       addPrefix,
+      decimalDelimChar,
     );
     if (converted === undefined) continue;
     if (converted === text.trim()) continue; // silent no-op
@@ -640,17 +678,51 @@ async function convertToCommand(targetName: string): Promise<void> {
 
   if (edits.length === 0) return;
 
-  await editor.edit((eb) => {
+  const applied = await editor.edit((eb) => {
     for (const e of edits) {
       eb.replace(e.range, e.newText);
     }
   });
+  if (!applied) {
+    const clipText = edits.map((e) => e.newText).join("\n");
+    await vscode.env.clipboard.writeText(clipText);
+    const msg =
+      edits.length === 1
+        ? `Editor is read-only — copied to clipboard`
+        : `Editor is read-only — ${edits.length} values copied to clipboard`;
+    vscode.window.showInformationMessage(msg);
+    return;
+  }
   if (edits.length > 1) {
     vscode.window.showInformationMessage(`Converted ${edits.length} tokens`);
   }
 }
 
 // --- activate ---
+
+function updateMenuContextKeys(): void {
+  const cfg = vscode.workspace.getConfiguration("basejump");
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuLayout",
+    cfg.get<string>("contextMenuLayout", "submenu"),
+  );
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuConvertNumber",
+    cfg.get<boolean>("menuShowConvertNumber", true),
+  );
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuConvertEditorContent",
+    cfg.get<boolean>("menuShowConvertEditorContent", true),
+  );
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuToggleDelimiters",
+    cfg.get<boolean>("menuShowToggleDelimiters", true),
+  );
+}
 
 export function activate(context: vscode.ExtensionContext) {
   console.log("BaseJump extension is now active!");
@@ -703,6 +775,10 @@ export function activate(context: vscode.ExtensionContext) {
       const enableHexBytes = enableDelimitedVariants;
       const enableDecimalThousands = enableDelimitedVariants;
       const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
+      const decimalDelimChar = getDecimalDelimiterChar(
+        cfg,
+        editor.document.languageId,
+      );
       const conversionGrouping = cfg.get<string>(
         "conversionGrouping",
         "byTarget",
@@ -774,6 +850,7 @@ export function activate(context: vscode.ExtensionContext) {
         enableHexBytes,
         enableDecimalThousands,
         nibbleDelim,
+        decimalDelimChar,
         context,
         copyButton,
         replaceButton,
@@ -801,12 +878,22 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
 
-      function doReplace(values: string[]) {
-        activeEditor.edit((eb) => {
+      async function doReplace(values: string[]) {
+        const applied = await activeEditor.edit((eb) => {
           for (let i = 0; i < activeTokens.length; i++) {
             eb.replace(activeTokens[i].range, values[i]);
           }
         });
+        if (!applied) {
+          const clipText = values.join("\n");
+          await vscode.env.clipboard.writeText(clipText);
+          const msg =
+            values.length === 1
+              ? `Editor is read-only — copied to clipboard`
+              : `Editor is read-only — ${values.length} values copied to clipboard`;
+          vscode.window.showInformationMessage(msg);
+          return;
+        }
         if (values.length > 1) {
           vscode.window.showInformationMessage(
             `Replaced ${values.length} tokens`,
@@ -835,7 +922,7 @@ export function activate(context: vscode.ExtensionContext) {
           await doCopy(item.convertedValues);
           qp.hide();
         } else if (e.button === replaceButton) {
-          doReplace(item.convertedValues);
+          await doReplace(item.convertedValues);
           qp.hide();
         } else if (e.button === starFull || e.button === starEmpty) {
           const nowFav = await toggleFavorite(context, item.conversionKey);
@@ -862,7 +949,7 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         if (defaultAction === "replaceInEditor") {
-          doReplace(selected.convertedValues);
+          await doReplace(selected.convertedValues);
         } else {
           await doCopy(selected.convertedValues);
         }
@@ -898,6 +985,10 @@ export function activate(context: vscode.ExtensionContext) {
       const enableHexBytes = enableDelimitedVariants;
       const enableDecimalThousands = enableDelimitedVariants;
       const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
+      const decimalDelimChar = getDecimalDelimiterChar(
+        cfg,
+        editor.document.languageId,
+      );
       const alwaysPrefix = cfg.get<boolean>("alwaysPrefixConversions", true);
       const items = buildFileConversionItems(
         enableOctal,
@@ -950,6 +1041,7 @@ export function activate(context: vscode.ExtensionContext) {
             enableDecimalThousands,
             nibbleDelim,
             addPrefix,
+            decimalDelimChar,
           );
           const converted = conversions[selected.targetBase];
           // Skip no-op replacements (e.g. plain binary when doing Binary→Binary
@@ -995,6 +1087,10 @@ export function activate(context: vscode.ExtensionContext) {
       );
       const enableOctal = cfg.get<boolean>("enableOctal", true);
       const nibbleDelim = getDelimiterChar(cfg, editor.document.languageId);
+      const decimalDelimChar = getDecimalDelimiterChar(
+        cfg,
+        editor.document.languageId,
+      );
 
       const edits: Array<{ range: vscode.Range; newText: string }> = [];
       for (const sel of editor.selections) {
@@ -1008,6 +1104,7 @@ export function activate(context: vscode.ExtensionContext) {
           extracted.text,
           enableOctal,
           nibbleDelim,
+          decimalDelimChar,
         );
         if (toggled !== undefined) {
           edits.push({ range: extracted.range, newText: toggled });
@@ -1021,11 +1118,20 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      await editor.edit((eb) => {
+      const applied = await editor.edit((eb) => {
         for (const e of edits) {
           eb.replace(e.range, e.newText);
         }
       });
+      if (!applied) {
+        const clipText = edits.map((e) => e.newText).join("\n");
+        await vscode.env.clipboard.writeText(clipText);
+        const msg =
+          edits.length === 1
+            ? `Editor is read-only — copied to clipboard`
+            : `Editor is read-only — ${edits.length} values copied to clipboard`;
+        vscode.window.showInformationMessage(msg);
+      }
     },
   );
 
@@ -1049,6 +1155,16 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.commands.registerCommand(cmd, () => convertToCommand(target)),
     );
   }
+
+  // Initialize context menu keys and keep them in sync with settings
+  updateMenuContextKeys();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("basejump")) {
+        updateMenuContextKeys();
+      }
+    }),
+  );
 }
 
 export function deactivate() {

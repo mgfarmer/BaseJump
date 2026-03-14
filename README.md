@@ -42,15 +42,67 @@ BaseJump's **Assume Binary** and **Assume Decimal** settings exist to help when 
 - **Multi-cursor and multi-selection** — all active cursors and block selections are processed simultaneously.
 - **Copy or replace** — choose whether conversions replace the token in the editor or copy the result to the clipboard. Per-item copy and replace buttons in the quick-pick let you override the default for any individual conversion on the fly.
 
-## Context Menu
+## Context Menu Configuration
 
-Right-clicking in any editor shows a **BaseJump** submenu containing:
+Right-clicking in any editor shows BaseJump commands. Both the layout and which commands appear are fully configurable.
 
-| Entry | Action |
-|---|---|
-| Convert Number | Detect base and show conversion quick-pick for the token at the cursor |
-| Convert Editor Content | Convert all compatible tokens in the file using a selected source→target pair |
-| Toggle Delimiters | Add, remove, or switch digit-group separators on the current token |
+### Layout: Submenu vs. Top Level
+
+The `basejump.contextMenuLayout` setting controls how BaseJump appears in the context menu.
+
+---
+
+**`submenu`** _(default)_ — all enabled commands are grouped under a single collapsible **BaseJump** entry:
+
+```
+  ─────────────────────────────
+  ▶ BaseJump
+      Convert Number
+      Convert Editor Content
+      Toggle Delimiters
+  ─────────────────────────────
+```
+
+This keeps the context menu clean and uncluttered, especially if you rarely use BaseJump from the menu.
+
+---
+
+**`topLevel`** — each enabled command appears directly in the context menu, visually separated from other menu items by divider lines:
+
+```
+  ─────────────────────────────
+  Convert Number
+  Convert Editor Content
+  Toggle Delimiters
+  ─────────────────────────────
+```
+
+This is useful if you use BaseJump frequently and want one-click access without the extra submenu hop.
+
+---
+
+**`none`** — BaseJump does not appear in the context menu at all. Use the Command Palette (`BaseJump:` category) or keyboard shortcuts instead. This is ideal for keyboard-first workflows where the context menu is rarely used and you prefer to keep it as minimal as possible.
+
+---
+
+### Per-Command Visibility
+
+Three settings let you hide individual commands from the context menu regardless of layout:
+
+| Setting | Default | Controls |
+|---|---|---|
+| `basejump.menuShowConvertNumber` | `true` | **Convert Number** |
+| `basejump.menuShowConvertEditorContent` | `true` | **Convert Editor Content** |
+| `basejump.menuShowToggleDelimiters` | `true` | **Toggle Delimiters** |
+
+Setting any of these to `false` hides that command from both the submenu and top-level layouts. For example, to keep only **Convert Number** visible:
+
+```jsonc
+"basejump.menuShowConvertEditorContent": false,
+"basejump.menuShowToggleDelimiters": false
+```
+
+> **Note:** Hiding a command from the context menu does not disable it — it remains fully available in the Command Palette and can still be bound to a keyboard shortcut.
 
 ## Commands and Keyboard Shortcuts
 
@@ -83,6 +135,10 @@ The direct-conversion commands (`convertToBinary`, `convertToHex`, etc.) are wel
 | `basejump.alwaysPrefixConversions` | `true` | When enabled, results always include the base prefix (`0b`, `0x`, `0o`). When disabled, a prefix is only added if the source token itself was prefixed — bare inputs produce bare outputs. |
 | `basejump.assumeBinaryWithoutPrefix` | `true` | Treat an unprefixed token made entirely of `0` and `1` digits as binary, skipping the source-base picker. Takes precedence over **Assume Decimal**. |
 | `basejump.assumeDecimalWithoutPrefix` | `true` | Treat an unprefixed all-digit token (or thousands-grouped number) as decimal, skipping the source-base picker. |
+| `basejump.contextMenuLayout` | `submenu` | How BaseJump commands appear in the editor right-click context menu: `submenu` (all commands under a **BaseJump** submenu), `topLevel` (commands placed directly in the context menu with separator lines), or `none` (no context menu entry — use the Command Palette or keyboard shortcuts). |
+| `basejump.menuShowConvertNumber` | `true` | Show the **Convert Number** command in the context menu (applies in both layout modes). |
+| `basejump.menuShowConvertEditorContent` | `true` | Show the **Convert Editor Content** command in the context menu (applies in both layout modes). |
+| `basejump.menuShowToggleDelimiters` | `true` | Show the **Toggle Delimiters** command in the context menu (applies in both layout modes). |
 
 The `basejump.fallbackDelimiter` setting is language-overridable, so you can set a different separator per language in your `settings.json`:
 
@@ -92,9 +148,9 @@ The `basejump.fallbackDelimiter` setting is language-overridable, so you can set
 }
 ```
 
-Built-in language defaults (applied automatically without any configuration): C/C++ → `'`, Python/Rust/Java/Go/Kotlin/Swift → `_`, Markdown/plain text → space.
+Built-in language defaults (applied automatically without any configuration): C/C++ → `'`, Python/Rust/Java/Go/Kotlin/Swift → `_`. Markdown and plain text files have no built-in default and use the `fallbackDelimiter` setting like any other unlisted language.
 
-**Special case — Decimal (thousands) in text/Markdown files:** When the delimiter for a file is space, converting to `Decimal (thousands)` would produce output like `1 000 000`, which is ambiguous and unfamiliar to most readers. Instead, BaseJump automatically uses the system locale's thousands separator for decimal output in these files — typically `,` on en-US systems (giving `1,000,000`) or `.` on European locales. This only affects decimal thousands output; binary nibble and hex byte output in text files still use space as normal.
+**Special case — Decimal (thousands) with space delimiter:** If you explicitly configure `fallbackDelimiter` to `space` and convert to `Decimal (thousands)`, BaseJump automatically uses the system locale's thousands separator instead (typically `,` on en-US or `.` on European locales), since space-separated digit groups like `1 000 000` are ambiguous and unfamiliar to most readers.
 
 **Note — No delimited octal variant:** Octal lacks a universally recognized digit-group separator. The natural grouping (every 3 or every 4 digits) is inconsistent across languages and tools, and no convention has emerged the way nibbles have for binary or bytes for hex. Rather than invent one, BaseJump omits the delimited octal option entirely.
 

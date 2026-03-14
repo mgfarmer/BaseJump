@@ -233,6 +233,106 @@ suite("Integration – toggleDelimiters", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Token extraction – comma-separated decimal thousands
+// Regression coverage: cursor anywhere in "1,234" must capture the full token.
+// ---------------------------------------------------------------------------
+suite("Integration – token extraction, comma-delimited decimal", () => {
+  for (const cursorCh of [0, 1, 2, 3, 4]) {
+    test(`cursor at col ${cursorCh} in "1,234" converts whole token to hex`, async () => {
+      const content = "1,234";
+      const cursorPos = new vscode.Position(0, cursorCh);
+      const result = await runCommandOnContent(
+        content,
+        "plaintext",
+        [new vscode.Selection(cursorPos, cursorPos)],
+        "basejump.convertToHex",
+      );
+      assert.strictEqual(result, "0x4D2");
+    });
+  }
+
+  test("cursor at col 3 in 'x 1,234 y' converts only the token", async () => {
+    const content = "x 1,234 y";
+    const cursorPos = new vscode.Position(0, 3); // inside "1,234"
+    const result = await runCommandOnContent(
+      content,
+      "plaintext",
+      [new vscode.Selection(cursorPos, cursorPos)],
+      "basejump.convertToHex",
+    );
+    assert.strictEqual(result, "x 0x4D2 y");
+  });
+
+  test("toggleDelimiters on '1,234' switches to apostrophe (cpp)", async () => {
+    const content = "1,234";
+    const cursorPos = new vscode.Position(0, 3); // col 3: after the comma
+    const result = await runCommandOnContent(
+      content,
+      "cpp",
+      [new vscode.Selection(cursorPos, cursorPos)],
+      "basejump.toggleDelimiters",
+    );
+    assert.strictEqual(result, "1'234");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Token extraction – all supported decimal thousands separators
+// Each separator variant should be fully captured and correctly converted.
+// Value used: 1_234_567 = decimal 1234567 = 0x12D687
+// ---------------------------------------------------------------------------
+suite("Integration – decimal thousands, all separator variants", () => {
+  const cases: Array<{
+    sep: string;
+    token: string;
+    label: string;
+    lang: string;
+  }> = [
+    { sep: ",", token: "1,234,567", label: "comma", lang: "plaintext" },
+    { sep: "'", token: "1'234'567", label: "apostrophe", lang: "cpp" },
+    { sep: "_", token: "1_234_567", label: "underscore", lang: "python" },
+    { sep: "-", token: "1-234-567", label: "hyphen", lang: "plaintext" },
+    { sep: ".", token: "1.234.567", label: "period", lang: "plaintext" },
+    { sep: "|", token: "1|234|567", label: "pipe", lang: "plaintext" },
+  ];
+
+  for (const { token, label, lang } of cases) {
+    test(`${label}-delimited "1${token[1]}234${token[1]}567" → 0x12D687 (cursor mid-token)`, async () => {
+      const cursorPos = new vscode.Position(0, 3); // inside the token, after first separator
+      const result = await runCommandOnContent(
+        token,
+        lang,
+        [new vscode.Selection(cursorPos, cursorPos)],
+        "basejump.convertToHex",
+      );
+      assert.strictEqual(result, "0x12D687");
+    });
+
+    test(`toggleDelimiters on ${label}-delimited "1${token[1]}234${token[1]}567" switches to lang default (cursor mid-token)`, async () => {
+      const cursorPos = new vscode.Position(0, 3);
+      // Just verify the whole token was found (no "no token" warning = non-empty result change)
+      const result = await runCommandOnContent(
+        token,
+        lang,
+        [new vscode.Selection(cursorPos, cursorPos)],
+        "basejump.toggleDelimiters",
+      );
+      // Result must differ from input (delimiter was toggled or stripped)
+      assert.notStrictEqual(
+        result,
+        token,
+        `toggleDelimiters left "${token}" unchanged`,
+      );
+      // Result must not contain the original token (full capture confirmed)
+      assert.ok(
+        !result.includes(token),
+        `original token still present: "${result}"`,
+      );
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Multi-selection batch conversion
 // ---------------------------------------------------------------------------
 suite("Integration – multi-selection", () => {
