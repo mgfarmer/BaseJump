@@ -4,7 +4,7 @@ Convert numeric literals between bases directly in the editor. BaseJump detects 
 
 ## AI Disclaimer
 
-- **YES** This extension was 100% vibe coded, including project scaffolding, design, implementation, test, and documentation. The only exception might be this **AI Disclaimer** section.
+- **YES** This extension was 100% vibe coded, including project scaffolding, design, icons, implementation, test, and documentation. The only exception might be this **AI Disclaimer** section.
 - **YES** I have 40 years of SW Dev experience that I lean on to "Guide the Vibe (tm)".
 - **NO** I have not looked at the code...at all.  It might be a hairy scary mess in there but all my tests pass. And I keep the tests up to date.
 - **YES** I wrote this extension primarily for myself and my team at work to help us be more productive because we deal in hex, binary and decimal constants all the time (not so much octal though...)
