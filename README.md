@@ -1,12 +1,12 @@
 ﻿# BaseJump
 
-Convert numeric literals between bases directly in the editor. BaseJump detects the base of any number under the cursor, presents all valid conversions in a quick-pick menu, and replaces the token in place — or copies the result to the clipboard.
+Convert numeric literals between bases directly in the editor. BaseJump detects the base of the number at the cursor — or every number across multiple cursors and block selections — and presents all valid conversions in a quick-pick menu. Replace in place or copy to the clipboard.
 
 ## AI Disclaimer
 
-- **YES** This extension was 100% vibe coded, including project scafolding, design, implementation, test, and documentation. The only exception might be this **AI Disclaimer** section.
-- **YES** I have 40 years of SW Dev experience that I lean on the Guide the Vibe (tm).
-- **NO** I have not looked at the code...at all.  I might be a hairy scary mess in there but all my tests pass. And I keep the tests up to date.
+- **YES** This extension was 100% vibe coded, including project scaffolding, design, implementation, test, and documentation. The only exception might be this **AI Disclaimer** section.
+- **YES** I have 40 years of SW Dev experience that I lean on to "Guide the Vibe (tm)".
+- **NO** I have not looked at the code...at all.  It might be a hairy scary mess in there but all my tests pass. And I keep the tests up to date.
 - **YES** I wrote this extension primarily for myself and my team at work to help us be more productive because we deal in hex, binary and decimal constants all the time (not so much octal though...)
 
 ## Best Practices: Always Prefix Your Numeric Literals
@@ -62,12 +62,12 @@ All BaseJump commands are available in the Command Palette under the `BaseJump:`
 | Convert Editor Content | `basejump.convertEditorContent` | Convert all tokens in the file |
 | Toggle Delimiters | `basejump.toggleDelimiters` | Add/remove/switch digit separators |
 | Convert to Binary | `basejump.convertToBinary` | Direct conversion to binary |
-| Convert to Binary (nibbles) | `basejump.convertToBinaryDelimited` | Binary with nibble separators |
+| Convert to Binary (nibbles) | `basejump.convertToBinaryDelimited` | Direct conversion to binary with nibble separators |
 | Convert to Octal | `basejump.convertToOctal` | Direct conversion to octal |
 | Convert to Decimal | `basejump.convertToDecimal` | Direct conversion to decimal |
-| Convert to Decimal (thousands) | `basejump.convertToDecimalDelimited` | Decimal with thousands separators |
+| Convert to Decimal (thousands) | `basejump.convertToDecimalDelimited` | Direct conversion to decimal with thousands separators |
 | Convert to Hexadecimal | `basejump.convertToHex` | Direct conversion to hexadecimal |
-| Convert to Hexadecimal (bytes) | `basejump.convertToHexDelimited` | Hexadecimal with byte separators |
+| Convert to Hexadecimal (bytes) | `basejump.convertToHexDelimited` | Direct conversion to hexadecimal with byte separators |
 
 The direct-conversion commands (`convertToBinary`, `convertToHex`, etc.) are well suited for keyboard shortcuts — they operate immediately on the token at the cursor(s) or seelcted block(s) only opening a menu if source bases are ambiguous.
 
@@ -95,6 +95,8 @@ The `basejump.fallbackDelimiter` setting is language-overridable, so you can set
 Built-in language defaults (applied automatically without any configuration): C/C++ → `'`, Python/Rust/Java/Go/Kotlin/Swift → `_`, Markdown/plain text → space.
 
 **Special case — Decimal (thousands) in text/Markdown files:** When the delimiter for a file is space, converting to `Decimal (thousands)` would produce output like `1 000 000`, which is ambiguous and unfamiliar to most readers. Instead, BaseJump automatically uses the system locale's thousands separator for decimal output in these files — typically `,` on en-US systems (giving `1,000,000`) or `.` on European locales. This only affects decimal thousands output; binary nibble and hex byte output in text files still use space as normal.
+
+**Note — No delimited octal variant:** Octal lacks a universally recognized digit-group separator. The natural grouping (every 3 or every 4 digits) is inconsistent across languages and tools, and no convention has emerged the way nibbles have for binary or bytes for hex. Rather than invent one, BaseJump omits the delimited octal option entirely.
 
 ## License
 
