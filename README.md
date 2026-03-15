@@ -12,7 +12,7 @@ Numeric literals without a base prefix are inherently ambiguous. Consider the va
 - As **hexadecimal**: it represents decimal **597**
 - As **binary**: it would be invalid (contains digits > 1), but `11111111` without a prefix looks like decimal 11,111,111 or hex 286,331,153
 
-When BaseJump encounters a literal without a prefix, it has to guess — or ask. If the value is unambiguously one base (e.g. all `0`s and `1`s could be binary), it may auto-detect. If multiple bases are plausible, it will prompt you to clarify intent before converting. The less ambiguous your input, the cleaner the experience: fewer prompts, a shorter conversion menu, and no second-guessing.
+When BaseJump encounters a literal without a prefix, it has to guess — or ask. If the value is unambiguously one base (e.g. has 'A'-'F') it will auto-detect hex. If multiple bases are plausible, it will prompt you to clarify intent before converting. The less ambiguous your input, the cleaner the experience: fewer prompts, a shorter conversion menu, and no second-guessing.
 
 **Recommendation: always use base prefixes.**
 
@@ -36,6 +36,7 @@ BaseJump's **Assume Binary** and **Assume Decimal** settings exist to help when 
 - **Block selection** — select a range of text and run **Convert Number** or a direct command; BaseJump scans the selected block for all individual tokens and converts every one in a single operation.
 - **Multi-cursor and multi-selection** — all active cursors and block selections are processed simultaneously.
 - **Copy or replace** — choose whether conversions replace the token in the editor or copy the result to the clipboard. Per-item copy and replace buttons in the quick-pick let you override the default for any individual conversion on the fly.
+- **Insert note** — the comment button (📝) in the quick-pick inserts a comment line immediately above the token's line, using language-appropriate comment syntax, with the original value and its conversion. For example, in a C++ file: `// BaseJump: 255 = 0xFF`. Supports `//`, `#`, `--`, `<!-- -->`, and `/* */` styles across all common languages.
 
 ## Context Menu Configuration
 
@@ -122,11 +123,47 @@ All BaseJump commands are available in the Command Palette under the `BaseJump:`
 
 The direct-conversion commands (`convertToBinary`, `convertToHex`, etc.) are well suited for keyboard shortcuts — they operate immediately on the token at the cursor(s) or selected block(s) only opening a menu if source bases are ambiguous.
 
+## Insert Comment
+
+The **Insert Comment** action inserts a language-appropriate comment line immediately above the token's line, showing the original value and its converted form. For example, in a C++ file:
+
+```cpp
+// BaseJump: 255 = 0xFF
+uint8_t mask = 255;
+```
+
+The inserted comment is indented to match the line it annotates.
+
+### Triggering Insert Comment
+
+There are two ways to insert a comment:
+
+- **Comment button** — click the 💬 button on any item in the **Convert Number** quick-pick. This works regardless of the `defaultAction` setting.
+- **Default action** — set `"basejump.defaultAction": "insertComment"` in your settings, then pressing **Enter** on any quick-pick item inserts a comment instead of replacing or copying.
+
+### Language Comment Styles
+
+BaseJump selects the comment syntax based on the active file's language:
+
+| Style | Languages |
+|---|---|
+| `// comment` | C, C++, C#, Java, JavaScript, TypeScript, Go, Rust, Swift, Kotlin, Dart, Scala, and more |
+| `# comment` | Python, Ruby, Shell/Bash, PowerShell, YAML, TOML, R, Perl, Makefile, and more |
+| `-- comment` | Lua, SQL, Haskell, VHDL, Ada |
+| `<!-- comment -->` | HTML, XML, Markdown, SVG |
+| `/* comment */` | CSS, SCSS, Less |
+
+Falls back to `// comment` for unrecognized languages.
+
+### Multi-Cursor Behavior
+
+When multiple cursors or a block selection produce tokens on the same line, only one comment is inserted for that line (listing all the conversions from that line). Tokens on different lines each get their own comment. Comments are inserted in reverse line order so that earlier line numbers are not displaced by insertions above them.
+
 ## Settings
 
 | Setting | Default | Description |
 |---|---|---|
-| `basejump.defaultAction` | `replaceInEditor` | Whether accepting a conversion in the quick-pick replaces the token in the editor (`replaceInEditor`) or copies it to the clipboard (`copyToClipboard`). |
+| `basejump.defaultAction` | `replaceInEditor` | The default Enter action in the Convert Number quick-pick: `replaceInEditor`, `copyToClipboard`, or `insertComment` (inserts a language-appropriate comment line above the token's line). |
 | `basejump.enableOctal` | `false` | Include octal in base detection and the **Convert Number** quick-pick. Disable to declutter the menu — the explicit **Convert to Octal** command remains available regardless. |
 | `basejump.enableDelimitedVariants` | `true` | Show nibble-separated binary, byte-separated hex, and thousands-separated decimal as additional options in the quick-pick and **Convert Editor Content** target list. Disable to keep the list shorter. |
 | `basejump.fallbackDelimiter` | `apostrophe` | Digit-group separator used when no per-language override or built-in language default applies. Choices: `apostrophe` (`'`), `underscore` (`_`), `space`, `hyphen` (`-`), `period` (`.`). |

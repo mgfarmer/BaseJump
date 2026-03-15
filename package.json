@@ -196,19 +196,23 @@
           "type": "string",
           "enum": [
             "copyToClipboard",
-            "replaceInEditor"
+            "replaceInEditor",
+            "insertComment"
           ],
           "enumItemLabels": [
             "Copy to Clipboard",
-            "Replace in Editor"
+            "Replace in Editor",
+            "Insert Comment"
           ],
           "enumDescriptions": [
             "Copy to Clipboard",
-            "Replace in Editor"
+            "Replace in Editor",
+            "Insert Comment"
           ],
           "markdownEnumDescriptions": [
             "**Copy to Clipboard** — Selecting a conversion copies the converted value to the clipboard.",
-            "**Replace in Editor** — Selecting a conversion replaces the source token in the editor with the converted value. _(default)_"
+            "**Replace in Editor** — Selecting a conversion replaces the source token in the editor with the converted value. _(default)_",
+            "**Insert Comment** — Selecting a conversion inserts a language-appropriate comment line above the token's line with the converted value."
           ],
           "default": "replaceInEditor",
           "markdownDescription": "The default action when selecting a conversion from the **Convert Number** quick-pick menu.\n\nThe per-item copy and replace buttons in the quick-pick let you override this for any individual conversion without changing this setting."

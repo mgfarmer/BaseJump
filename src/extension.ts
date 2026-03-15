@@ -10,6 +10,9 @@ import {
   getDirectCommandCandidates,
   convertValueToTarget,
   toggleDelimitersForToken,
+  getCommentStyle,
+  buildAnnotationInsertions,
+  AnnotationToken,
 } from "./conversion";
 
 const FAVORITES_KEY = "basejump.favorites";
@@ -249,6 +252,7 @@ function buildItems(
   context: vscode.ExtensionContext,
   copyButton: vscode.QuickInputButton,
   replaceButton: vscode.QuickInputButton,
+  noteButton: vscode.QuickInputButton,
   starButtons: {
     full: vscode.QuickInputButton;
     empty: vscode.QuickInputButton;
@@ -336,6 +340,7 @@ function buildItems(
         buttons: [
           copyButton,
           replaceButton,
+          noteButton,
           fav ? starButtons.full : starButtons.empty,
         ],
       });
@@ -784,6 +789,10 @@ export function activate(context: vscode.ExtensionContext) {
     iconPath: new vscode.ThemeIcon("star-empty"),
     tooltip: "Add to Favorites",
   };
+  const noteButton: vscode.QuickInputButton = {
+    iconPath: new vscode.ThemeIcon("comment"),
+    tooltip: "Insert note above line",
+  };
   const starButtons = { full: starFull, empty: starEmpty };
 
   const disposable = vscode.commands.registerCommand(
@@ -889,6 +898,7 @@ export function activate(context: vscode.ExtensionContext) {
         context,
         copyButton,
         replaceButton,
+        noteButton,
         starButtons,
         conversionGrouping,
         alwaysPrefix,
@@ -936,12 +946,41 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
 
+      async function doAnnotate(values: string[]) {
+        const style = getCommentStyle(activeEditor.document.languageId);
+        const annotTokens: AnnotationToken[] = activeTokens.map((t) => ({
+          lineNum: t.range.start.line,
+          lineIndent:
+            activeEditor.document
+              .lineAt(t.range.start.line)
+              .text.match(/^(\s*)/)?.[1] ?? "",
+          text: t.text,
+        }));
+        const insertions = buildAnnotationInsertions(
+          annotTokens,
+          values,
+          style,
+        );
+        const applied = await activeEditor.edit((eb) => {
+          for (const { lineNum, commentText } of insertions) {
+            eb.insert(new vscode.Position(lineNum, 0), commentText);
+          }
+        });
+        if (!applied) {
+          vscode.window.showInformationMessage(
+            "Editor is read-only \u2014 cannot insert note",
+          );
+        }
+      }
+
       // --- Build and show QuickPick ---
       const qp = vscode.window.createQuickPick<ConversionQuickPickItem>();
       const defaultHint =
         defaultAction === "replaceInEditor"
-          ? "Enter replaces in editor  |  [copy] copy  |  [star] toggle favorite"
-          : "Enter copies to clipboard  |  [replace] replace  |  [star] toggle favorite";
+          ? "Enter replaces in editor  |  [copy] copy  |  [comment] note  |  [star] toggle favorite"
+          : defaultAction === "insertComment"
+            ? "Enter inserts comment  |  [copy] copy  |  [replace] replace  |  [star] toggle favorite"
+            : "Enter copies to clipboard  |  [replace] replace  |  [comment] note  |  [star] toggle favorite";
       const titleSource =
         tokens.length === 1
           ? `"${tokens[0].text}"`
@@ -959,6 +998,9 @@ export function activate(context: vscode.ExtensionContext) {
         } else if (e.button === replaceButton) {
           await doReplace(item.convertedValues);
           qp.hide();
+        } else if (e.button === noteButton) {
+          await doAnnotate(item.convertedValues);
+          qp.hide();
         } else if (e.button === starFull || e.button === starEmpty) {
           const nowFav = await toggleFavorite(context, item.conversionKey);
           // Update just the star button on the affected item in-place
@@ -969,6 +1011,7 @@ export function activate(context: vscode.ExtensionContext) {
             const newButtons = [
               copyButton,
               replaceButton,
+              noteButton,
               nowFav ? starFull : starEmpty,
             ];
             return { ...i, buttons: newButtons };
@@ -985,6 +1028,8 @@ export function activate(context: vscode.ExtensionContext) {
         }
         if (defaultAction === "replaceInEditor") {
           await doReplace(selected.convertedValues);
+        } else if (defaultAction === "insertComment") {
+          await doAnnotate(selected.convertedValues);
         } else {
           await doCopy(selected.convertedValues);
         }

@@ -417,3 +417,122 @@ export function toggleDelimitersForToken(
 
   return undefined; // unsupported type (e.g. bare octal)
 }
+
+// --- Annotation helpers ---
+
+export interface CommentStyle {
+  prefix: string;
+  suffix: string;
+}
+
+export function getCommentStyle(languageId: string): CommentStyle {
+  switch (languageId.toLowerCase()) {
+    // Line-comment languages (// style)
+    case "typescript":
+    case "typescriptreact":
+    case "javascript":
+    case "javascriptreact":
+    case "c":
+    case "cpp":
+    case "csharp":
+    case "java":
+    case "kotlin":
+    case "swift":
+    case "go":
+    case "rust":
+    case "dart":
+    case "scala":
+    case "groovy":
+    case "objective-c":
+    case "objective-cpp":
+    case "systemverilog":
+    case "verilog":
+      return { prefix: "//", suffix: "" };
+
+    // Hash-comment languages
+    case "python":
+    case "ruby":
+    case "shellscript":
+    case "shell":
+    case "bash":
+    case "zsh":
+    case "fish":
+    case "perl":
+    case "r":
+    case "yaml":
+    case "toml":
+    case "makefile":
+    case "dockerfile":
+    case "coffeescript":
+    case "powershell":
+      return { prefix: "#", suffix: "" };
+
+    // Double-dash comment languages
+    case "lua":
+    case "sql":
+    case "plsql":
+    case "vhdl":
+    case "ada":
+    case "haskell":
+    case "elm":
+      return { prefix: "--", suffix: "" };
+
+    // Block-comment-only languages
+    case "html":
+    case "xml":
+    case "markdown":
+    case "svg":
+    case "handlebars":
+    case "razor":
+      return { prefix: "<!--", suffix: " -->" };
+
+    case "css":
+    case "scss":
+    case "less":
+    case "stylus":
+      return { prefix: "/*", suffix: " */" };
+
+    // Default: C-style line comment
+    default:
+      return { prefix: "//", suffix: "" };
+  }
+}
+
+export interface AnnotationToken {
+  lineNum: number;
+  lineIndent: string;
+  text: string;
+}
+
+/**
+ * Pure helper: given tokens (with line info), parallel converted values, and a comment
+ * style, returns the comment lines to insert — one per unique line, ordered in descending
+ * line number so insertions can be applied in sequence without shifting positions.
+ */
+export function buildAnnotationInsertions(
+  tokens: AnnotationToken[],
+  values: string[],
+  style: CommentStyle,
+): Array<{ lineNum: number; commentText: string }> {
+  const byLine = new Map<
+    number,
+    Array<{ text: string; converted: string; indent: string }>
+  >();
+  for (let i = 0; i < tokens.length; i++) {
+    const { lineNum, lineIndent, text } = tokens[i];
+    if (!byLine.has(lineNum)) {
+      byLine.set(lineNum, []);
+    }
+    byLine
+      .get(lineNum)!
+      .push({ text, converted: values[i], indent: lineIndent });
+  }
+  const lineNums = [...byLine.keys()].sort((a, b) => b - a);
+  return lineNums.map((lineNum) => {
+    const parts = byLine.get(lineNum)!;
+    const indent = parts[0].indent;
+    const body = parts.map((p) => `${p.text} = ${p.converted}`).join(", ");
+    const commentText = `${indent}${style.prefix} BaseJump: ${body}${style.suffix}\n`;
+    return { lineNum, commentText };
+  });
+}

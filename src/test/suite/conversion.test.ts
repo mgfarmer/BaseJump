@@ -12,6 +12,8 @@ import {
   toDecimalThousands,
   toHexBytes,
   toggleDelimitersForToken,
+  getCommentStyle,
+  buildAnnotationInsertions,
 } from "../../conversion";
 
 // ---------------------------------------------------------------------------
@@ -852,3 +854,390 @@ suite(
     });
   },
 );
+
+// ---------------------------------------------------------------------------
+// getCommentStyle
+// ---------------------------------------------------------------------------
+suite("getCommentStyle – slash languages", () => {
+  test("typescript → //", () => {
+    assert.deepStrictEqual(getCommentStyle("typescript"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("typescriptreact → //", () => {
+    assert.deepStrictEqual(getCommentStyle("typescriptreact"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("javascript → //", () => {
+    assert.deepStrictEqual(getCommentStyle("javascript"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("cpp → //", () => {
+    assert.deepStrictEqual(getCommentStyle("cpp"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("c → //", () => {
+    assert.deepStrictEqual(getCommentStyle("c"), { prefix: "//", suffix: "" });
+  });
+  test("csharp → //", () => {
+    assert.deepStrictEqual(getCommentStyle("csharp"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("java → //", () => {
+    assert.deepStrictEqual(getCommentStyle("java"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("go → //", () => {
+    assert.deepStrictEqual(getCommentStyle("go"), { prefix: "//", suffix: "" });
+  });
+  test("rust → //", () => {
+    assert.deepStrictEqual(getCommentStyle("rust"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("kotlin → //", () => {
+    assert.deepStrictEqual(getCommentStyle("kotlin"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("swift → //", () => {
+    assert.deepStrictEqual(getCommentStyle("swift"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("dart → //", () => {
+    assert.deepStrictEqual(getCommentStyle("dart"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+});
+
+suite("getCommentStyle – hash languages", () => {
+  test("python → #", () => {
+    assert.deepStrictEqual(getCommentStyle("python"), {
+      prefix: "#",
+      suffix: "",
+    });
+  });
+  test("ruby → #", () => {
+    assert.deepStrictEqual(getCommentStyle("ruby"), {
+      prefix: "#",
+      suffix: "",
+    });
+  });
+  test("shellscript → #", () => {
+    assert.deepStrictEqual(getCommentStyle("shellscript"), {
+      prefix: "#",
+      suffix: "",
+    });
+  });
+  test("bash → #", () => {
+    assert.deepStrictEqual(getCommentStyle("bash"), {
+      prefix: "#",
+      suffix: "",
+    });
+  });
+  test("powershell → #", () => {
+    assert.deepStrictEqual(getCommentStyle("powershell"), {
+      prefix: "#",
+      suffix: "",
+    });
+  });
+  test("yaml → #", () => {
+    assert.deepStrictEqual(getCommentStyle("yaml"), {
+      prefix: "#",
+      suffix: "",
+    });
+  });
+  test("dockerfile → #", () => {
+    assert.deepStrictEqual(getCommentStyle("dockerfile"), {
+      prefix: "#",
+      suffix: "",
+    });
+  });
+  test("r → #", () => {
+    assert.deepStrictEqual(getCommentStyle("r"), { prefix: "#", suffix: "" });
+  });
+});
+
+suite("getCommentStyle – double-dash languages", () => {
+  test("lua → --", () => {
+    assert.deepStrictEqual(getCommentStyle("lua"), {
+      prefix: "--",
+      suffix: "",
+    });
+  });
+  test("sql → --", () => {
+    assert.deepStrictEqual(getCommentStyle("sql"), {
+      prefix: "--",
+      suffix: "",
+    });
+  });
+  test("haskell → --", () => {
+    assert.deepStrictEqual(getCommentStyle("haskell"), {
+      prefix: "--",
+      suffix: "",
+    });
+  });
+  test("vhdl → --", () => {
+    assert.deepStrictEqual(getCommentStyle("vhdl"), {
+      prefix: "--",
+      suffix: "",
+    });
+  });
+});
+
+suite("getCommentStyle – block-comment languages", () => {
+  test("html → <!-- -->", () => {
+    assert.deepStrictEqual(getCommentStyle("html"), {
+      prefix: "<!--",
+      suffix: " -->",
+    });
+  });
+  test("xml → <!-- -->", () => {
+    assert.deepStrictEqual(getCommentStyle("xml"), {
+      prefix: "<!--",
+      suffix: " -->",
+    });
+  });
+  test("markdown → <!-- -->", () => {
+    assert.deepStrictEqual(getCommentStyle("markdown"), {
+      prefix: "<!--",
+      suffix: " -->",
+    });
+  });
+  test("css → /* */", () => {
+    assert.deepStrictEqual(getCommentStyle("css"), {
+      prefix: "/*",
+      suffix: " */",
+    });
+  });
+  test("scss → /* */", () => {
+    assert.deepStrictEqual(getCommentStyle("scss"), {
+      prefix: "/*",
+      suffix: " */",
+    });
+  });
+  test("less → /* */", () => {
+    assert.deepStrictEqual(getCommentStyle("less"), {
+      prefix: "/*",
+      suffix: " */",
+    });
+  });
+});
+
+suite("getCommentStyle – defaults", () => {
+  test("unknown language → //", () => {
+    assert.deepStrictEqual(getCommentStyle("unknown-lang"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("empty string → //", () => {
+    assert.deepStrictEqual(getCommentStyle(""), { prefix: "//", suffix: "" });
+  });
+  test("case insensitive: TypeScript (capital T) → //", () => {
+    assert.deepStrictEqual(getCommentStyle("TypeScript"), {
+      prefix: "//",
+      suffix: "",
+    });
+  });
+  test("case insensitive: PYTHON → #", () => {
+    assert.deepStrictEqual(getCommentStyle("PYTHON"), {
+      prefix: "#",
+      suffix: "",
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildAnnotationInsertions
+// ---------------------------------------------------------------------------
+suite("buildAnnotationInsertions – single token", () => {
+  test("no indent, slash style", () => {
+    const result = buildAnnotationInsertions(
+      [{ lineNum: 3, lineIndent: "", text: "255" }],
+      ["0xFF"],
+      { prefix: "//", suffix: "" },
+    );
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].lineNum, 3);
+    assert.strictEqual(result[0].commentText, "// BaseJump: 255 = 0xFF\n");
+  });
+
+  test("with indent preserved", () => {
+    const result = buildAnnotationInsertions(
+      [{ lineNum: 1, lineIndent: "    ", text: "0xFF" }],
+      ["255"],
+      { prefix: "//", suffix: "" },
+    );
+    assert.strictEqual(result[0].commentText, "    // BaseJump: 0xFF = 255\n");
+  });
+
+  test("hash style (#)", () => {
+    const result = buildAnnotationInsertions(
+      [{ lineNum: 0, lineIndent: "", text: "255" }],
+      ["0xFF"],
+      { prefix: "#", suffix: "" },
+    );
+    assert.strictEqual(result[0].commentText, "# BaseJump: 255 = 0xFF\n");
+  });
+
+  test("double-dash style (--)", () => {
+    const result = buildAnnotationInsertions(
+      [{ lineNum: 0, lineIndent: "", text: "255" }],
+      ["0xFF"],
+      { prefix: "--", suffix: "" },
+    );
+    assert.strictEqual(result[0].commentText, "-- BaseJump: 255 = 0xFF\n");
+  });
+
+  test("block-comment style with suffix (html)", () => {
+    const result = buildAnnotationInsertions(
+      [{ lineNum: 0, lineIndent: "  ", text: "255" }],
+      ["0xFF"],
+      { prefix: "<!--", suffix: " -->" },
+    );
+    assert.strictEqual(
+      result[0].commentText,
+      "  <!-- BaseJump: 255 = 0xFF -->\n",
+    );
+  });
+
+  test("css block-comment style with suffix", () => {
+    const result = buildAnnotationInsertions(
+      [{ lineNum: 0, lineIndent: "\t", text: "255" }],
+      ["0xFF"],
+      { prefix: "/*", suffix: " */" },
+    );
+    assert.strictEqual(result[0].commentText, "\t/* BaseJump: 255 = 0xFF */\n");
+  });
+});
+
+suite("buildAnnotationInsertions – multi-token same line", () => {
+  test("two tokens on line 2 → one comment combining both", () => {
+    const result = buildAnnotationInsertions(
+      [
+        { lineNum: 2, lineIndent: "  ", text: "255" },
+        { lineNum: 2, lineIndent: "  ", text: "0b11" },
+      ],
+      ["0xFF", "3"],
+      { prefix: "//", suffix: "" },
+    );
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].lineNum, 2);
+    assert.strictEqual(
+      result[0].commentText,
+      "  // BaseJump: 255 = 0xFF, 0b11 = 3\n",
+    );
+  });
+
+  test("three tokens on same line → one comment", () => {
+    const result = buildAnnotationInsertions(
+      [
+        { lineNum: 0, lineIndent: "", text: "10" },
+        { lineNum: 0, lineIndent: "", text: "20" },
+        { lineNum: 0, lineIndent: "", text: "30" },
+      ],
+      ["0xA", "0x14", "0x1E"],
+      { prefix: "//", suffix: "" },
+    );
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(
+      result[0].commentText,
+      "// BaseJump: 10 = 0xA, 20 = 0x14, 30 = 0x1E\n",
+    );
+  });
+});
+
+suite("buildAnnotationInsertions – multi-token different lines", () => {
+  test("two tokens on different lines → two insertions in reverse order", () => {
+    const result = buildAnnotationInsertions(
+      [
+        { lineNum: 1, lineIndent: "", text: "10" },
+        { lineNum: 5, lineIndent: "", text: "255" },
+      ],
+      ["0xA", "0xFF"],
+      { prefix: "//", suffix: "" },
+    );
+    assert.strictEqual(result.length, 2);
+    // Reverse order: line 5 first, then line 1
+    assert.strictEqual(result[0].lineNum, 5);
+    assert.strictEqual(result[0].commentText, "// BaseJump: 255 = 0xFF\n");
+    assert.strictEqual(result[1].lineNum, 1);
+    assert.strictEqual(result[1].commentText, "// BaseJump: 10 = 0xA\n");
+  });
+
+  test("tokens on lines 0, 3, 7 → result ordered 7, 3, 0", () => {
+    const result = buildAnnotationInsertions(
+      [
+        { lineNum: 0, lineIndent: "", text: "1" },
+        { lineNum: 7, lineIndent: "\t", text: "3" },
+        { lineNum: 3, lineIndent: "  ", text: "2" },
+      ],
+      ["0x1", "0x3", "0x2"],
+      { prefix: "//", suffix: "" },
+    );
+    assert.deepStrictEqual(
+      result.map((r) => r.lineNum),
+      [7, 3, 0],
+    );
+  });
+
+  test("mixed: two on line 4, one on line 1 → reverse order [4, 1]", () => {
+    const result = buildAnnotationInsertions(
+      [
+        { lineNum: 4, lineIndent: "", text: "255" },
+        { lineNum: 1, lineIndent: "", text: "10" },
+        { lineNum: 4, lineIndent: "", text: "16" },
+      ],
+      ["0xFF", "0xA", "0x10"],
+      { prefix: "#", suffix: "" },
+    );
+    assert.strictEqual(result.length, 2);
+    assert.strictEqual(result[0].lineNum, 4);
+    assert.strictEqual(
+      result[0].commentText,
+      "# BaseJump: 255 = 0xFF, 16 = 0x10\n",
+    );
+    assert.strictEqual(result[1].lineNum, 1);
+    assert.strictEqual(result[1].commentText, "# BaseJump: 10 = 0xA\n");
+  });
+});
+
+suite("buildAnnotationInsertions – edge cases", () => {
+  test("empty token list → empty result", () => {
+    const result = buildAnnotationInsertions([], [], {
+      prefix: "//",
+      suffix: "",
+    });
+    assert.deepStrictEqual(result, []);
+  });
+
+  test("indent from first token on line is used when two tokens share a line", () => {
+    const result = buildAnnotationInsertions(
+      [
+        { lineNum: 0, lineIndent: "    ", text: "1" },
+        { lineNum: 0, lineIndent: "\t", text: "2" }, // second token's indent ignored
+      ],
+      ["0x1", "0x2"],
+      { prefix: "//", suffix: "" },
+    );
+    assert.ok(result[0].commentText.startsWith("    "));
+  });
+});
