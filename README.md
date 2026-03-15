@@ -1,5 +1,7 @@
 ﻿# BaseJump
 
+![alt](https://github.com/mgfarmer/BaseJump/blob/main/img/AIwEG_Badge.png?raw=true")
+
 Convert numeric literals between bases directly in the editor. BaseJump detects the base of the number at the cursor — or every number across multiple cursors and block selections — and presents all valid conversions in a quick-pick menu. Replace in place or copy to the clipboard.
 
 ## Best Practices: Always Prefix Your Numeric Literals
