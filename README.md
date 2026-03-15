@@ -87,15 +87,24 @@ This is useful if you use BaseJump frequently and want one-click access without 
 
 ### Per-Command Visibility
 
-Three settings let you hide individual commands from the context menu regardless of layout:
+Each command can be shown or hidden independently of the layout mode:
 
 | Setting | Default | Controls |
 |---|---|---|
-| `basejump.menuShowConvertNumber` | `true` | **Convert Number** |
+| `basejump.menuShowConvertNumber` | `true` | **Convert Number** — the all-in-one quick-pick option |
 | `basejump.menuShowConvertEditorContent` | `true` | **Convert Editor Content** |
 | `basejump.menuShowToggleDelimiters` | `true` | **Toggle Delimiters** |
+| `basejump.menuShowConvertToBinary` | `false` | **Convert to Binary** |
+| `basejump.menuShowConvertToBinaryDelimited` | `false` | **Convert to Binary (nibbles)** |
+| `basejump.menuShowConvertToOctal` | `false` | **Convert to Octal** |
+| `basejump.menuShowConvertToDecimal` | `false` | **Convert to Decimal** |
+| `basejump.menuShowConvertToDecimalDelimited` | `false` | **Convert to Decimal (thousands)** |
+| `basejump.menuShowConvertToHex` | `false` | **Convert to Hexadecimal** |
+| `basejump.menuShowConvertToHexDelimited` | `false` | **Convert to Hexadecimal (bytes)** |
 
-Setting any of these to `false` hides that command from both the submenu and top-level layouts. For example, to keep only **Convert Number** visible:
+**Convert Number** is the all-in-one option: one menu entry, any conversion, chosen via quick-pick. Use it for a minimal menu. The explicit conversion commands (`Convert to Binary`, `Convert to Hex`, etc.) give you finer-grained control — enable whichever targets you want to appear directly in the menu, and disable **Convert Number** if you prefer everything to be one click away.
+
+For example, to show only **Convert Number** and hide the other general commands:
 
 ```jsonc
 "basejump.menuShowConvertEditorContent": false,
@@ -136,9 +145,16 @@ The direct-conversion commands (`convertToBinary`, `convertToHex`, etc.) are wel
 | `basejump.assumeBinaryWithoutPrefix` | `true` | Treat an unprefixed token made entirely of `0` and `1` digits as binary, skipping the source-base picker. Takes precedence over **Assume Decimal**. |
 | `basejump.assumeDecimalWithoutPrefix` | `true` | Treat an unprefixed all-digit token (or thousands-grouped number) as decimal, skipping the source-base picker. |
 | `basejump.contextMenuLayout` | `submenu` | How BaseJump commands appear in the editor right-click context menu: `submenu` (all commands under a **BaseJump** submenu), `topLevel` (commands placed directly in the context menu with separator lines), or `none` (no context menu entry — use the Command Palette or keyboard shortcuts). |
-| `basejump.menuShowConvertNumber` | `true` | Show the **Convert Number** command in the context menu (applies in both layout modes). |
+| `basejump.menuShowConvertNumber` | `true` | Show the **Convert Number** command in the context menu. This is the all-in-one option — a single entry that handles any conversion via a quick-pick. Prefer this for a minimal menu. Disable it and enable the explicit conversion commands below for finer-grained control over which conversions appear. |
 | `basejump.menuShowConvertEditorContent` | `true` | Show the **Convert Editor Content** command in the context menu (applies in both layout modes). |
 | `basejump.menuShowToggleDelimiters` | `true` | Show the **Toggle Delimiters** command in the context menu (applies in both layout modes). |
+| `basejump.menuShowConvertToBinary` | `false` | Show the **Convert to Binary** command in the context menu (applies in both layout modes). |
+| `basejump.menuShowConvertToBinaryDelimited` | `false` | Show the **Convert to Binary (nibbles)** command in the context menu (applies in both layout modes). |
+| `basejump.menuShowConvertToOctal` | `false` | Show the **Convert to Octal** command in the context menu (applies in both layout modes). |
+| `basejump.menuShowConvertToDecimal` | `false` | Show the **Convert to Decimal** command in the context menu (applies in both layout modes). |
+| `basejump.menuShowConvertToDecimalDelimited` | `false` | Show the **Convert to Decimal (thousands)** command in the context menu (applies in both layout modes). |
+| `basejump.menuShowConvertToHex` | `false` | Show the **Convert to Hexadecimal** command in the context menu (applies in both layout modes). |
+| `basejump.menuShowConvertToHexDelimited` | `false` | Show the **Convert to Hexadecimal (bytes)** command in the context menu (applies in both layout modes). |
 
 The `basejump.fallbackDelimiter` setting is language-overridable, so you can set a different separator per language in your `settings.json`:
 

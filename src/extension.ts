@@ -722,6 +722,41 @@ function updateMenuContextKeys(): void {
     "basejump.menuToggleDelimiters",
     cfg.get<boolean>("menuShowToggleDelimiters", true),
   );
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuConvertToBinary",
+    cfg.get<boolean>("menuShowConvertToBinary", false),
+  );
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuConvertToBinaryDelimited",
+    cfg.get<boolean>("menuShowConvertToBinaryDelimited", false),
+  );
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuConvertToOctal",
+    cfg.get<boolean>("menuShowConvertToOctal", false),
+  );
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuConvertToDecimal",
+    cfg.get<boolean>("menuShowConvertToDecimal", false),
+  );
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuConvertToDecimalDelimited",
+    cfg.get<boolean>("menuShowConvertToDecimalDelimited", false),
+  );
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuConvertToHex",
+    cfg.get<boolean>("menuShowConvertToHex", false),
+  );
+  vscode.commands.executeCommand(
+    "setContext",
+    "basejump.menuConvertToHexDelimited",
+    cfg.get<boolean>("menuShowConvertToHexDelimited", false),
+  );
 }
 
 export function activate(context: vscode.ExtensionContext) {

@@ -95,6 +95,41 @@
           "command": "basejump.toggleDelimiters",
           "group": "basejump@3",
           "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuToggleDelimiters"
+        },
+        {
+          "command": "basejump.convertToBinary",
+          "group": "basejump@4",
+          "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuConvertToBinary"
+        },
+        {
+          "command": "basejump.convertToBinaryDelimited",
+          "group": "basejump@5",
+          "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuConvertToBinaryDelimited"
+        },
+        {
+          "command": "basejump.convertToOctal",
+          "group": "basejump@6",
+          "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuConvertToOctal"
+        },
+        {
+          "command": "basejump.convertToDecimal",
+          "group": "basejump@7",
+          "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuConvertToDecimal"
+        },
+        {
+          "command": "basejump.convertToDecimalDelimited",
+          "group": "basejump@8",
+          "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuConvertToDecimalDelimited"
+        },
+        {
+          "command": "basejump.convertToHex",
+          "group": "basejump@9",
+          "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuConvertToHex"
+        },
+        {
+          "command": "basejump.convertToHexDelimited",
+          "group": "basejump@10",
+          "when": "editorTextFocus && basejump.menuLayout == 'topLevel' && basejump.menuConvertToHexDelimited"
         }
       ],
       "basejump.submenu": [
@@ -115,6 +150,41 @@
           "title": "Toggle Delimiters",
           "group": "navigation",
           "when": "basejump.menuToggleDelimiters != false"
+        },
+        {
+          "command": "basejump.convertToBinary",
+          "group": "z_convert@1",
+          "when": "basejump.menuConvertToBinary"
+        },
+        {
+          "command": "basejump.convertToBinaryDelimited",
+          "group": "z_convert@2",
+          "when": "basejump.menuConvertToBinaryDelimited"
+        },
+        {
+          "command": "basejump.convertToOctal",
+          "group": "z_convert@3",
+          "when": "basejump.menuConvertToOctal"
+        },
+        {
+          "command": "basejump.convertToDecimal",
+          "group": "z_convert@4",
+          "when": "basejump.menuConvertToDecimal"
+        },
+        {
+          "command": "basejump.convertToDecimalDelimited",
+          "group": "z_convert@5",
+          "when": "basejump.menuConvertToDecimalDelimited"
+        },
+        {
+          "command": "basejump.convertToHex",
+          "group": "z_convert@6",
+          "when": "basejump.menuConvertToHex"
+        },
+        {
+          "command": "basejump.convertToHexDelimited",
+          "group": "z_convert@7",
+          "when": "basejump.menuConvertToHexDelimited"
         }
       ]
     },
@@ -237,7 +307,7 @@
           "order": 12,
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show the **Convert Number** command in the editor context menu (both submenu and top-level layouts)."
+          "markdownDescription": "Show the **Convert Number** command in the editor context menu. This is the all-in-one option: a single menu entry that handles any conversion via a quick-pick. Prefer this for a minimal menu. Disable it and enable the explicit conversion commands below for finer-grained control over exactly which conversions appear in the menu."
         },
         "basejump.menuShowConvertEditorContent": {
           "order": 13,
@@ -250,6 +320,48 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show the **Toggle Delimiters** command in the editor context menu (both submenu and top-level layouts)."
+        },
+        "basejump.menuShowConvertToBinary": {
+          "order": 15,
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show the **Convert to Binary** command in the editor context menu (both submenu and top-level layouts)."
+        },
+        "basejump.menuShowConvertToBinaryDelimited": {
+          "order": 16,
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show the **Convert to Binary (nibbles)** command in the editor context menu (both submenu and top-level layouts)."
+        },
+        "basejump.menuShowConvertToOctal": {
+          "order": 17,
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show the **Convert to Octal** command in the editor context menu (both submenu and top-level layouts)."
+        },
+        "basejump.menuShowConvertToDecimal": {
+          "order": 18,
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show the **Convert to Decimal** command in the editor context menu (both submenu and top-level layouts)."
+        },
+        "basejump.menuShowConvertToDecimalDelimited": {
+          "order": 19,
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show the **Convert to Decimal (thousands)** command in the editor context menu (both submenu and top-level layouts)."
+        },
+        "basejump.menuShowConvertToHex": {
+          "order": 20,
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show the **Convert to Hexadecimal** command in the editor context menu (both submenu and top-level layouts)."
+        },
+        "basejump.menuShowConvertToHexDelimited": {
+          "order": 21,
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show the **Convert to Hexadecimal (bytes)** command in the editor context menu (both submenu and top-level layouts)."
         }
       }
     }
