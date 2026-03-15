@@ -2,13 +2,6 @@
 
 Convert numeric literals between bases directly in the editor. BaseJump detects the base of the number at the cursor — or every number across multiple cursors and block selections — and presents all valid conversions in a quick-pick menu. Replace in place or copy to the clipboard.
 
-## AI Disclaimer
-
-- **YES** This extension was 100% vibe coded, including project scaffolding, design, icons, implementation, test, and documentation. The only exception might be this **AI Disclaimer** section.
-- **YES** I have 40 years of SW Dev experience that I lean on to "Guide the Vibe (tm)".
-- **NO** I have not looked at the code...at all.  It might be a hairy scary mess in there but all my tests pass. And I keep the tests up to date.
-- **YES** I wrote this extension primarily for myself and my team at work to help us be more productive because we deal in hex, binary and decimal constants all the time (not so much octal though...)
-
 ## Best Practices: Always Prefix Your Numeric Literals
 
 Numeric literals without a base prefix are inherently ambiguous. Consider the value `255`:
@@ -104,18 +97,13 @@ Each command can be shown or hidden independently of the layout mode:
 
 **Convert Number** is the all-in-one option: one menu entry, any conversion, chosen via quick-pick. Use it for a minimal menu. The explicit conversion commands (`Convert to Binary`, `Convert to Hex`, etc.) give you finer-grained control — enable whichever targets you want to appear directly in the menu, and disable **Convert Number** if you prefer everything to be one click away.
 
-For example, to show only **Convert Number** and hide the other general commands:
+ **Note:** If all commands are disabled, no BaseJump entry will appear in the context menu at all (equivalent to setting `contextMenuLayout` to `none`). All commands remain fully accessible via the Command Palette and any keyboard shortcuts you have assigned.
 
-```jsonc
-"basejump.menuShowConvertEditorContent": false,
-"basejump.menuShowToggleDelimiters": false
-```
-
-> **Note:** Hiding a command from the context menu does not disable it — it remains fully available in the Command Palette and can still be bound to a keyboard shortcut.
+ **Note:** Hiding a command from the context menu does not disable it — it remains fully available in the Command Palette and can still be bound to a keyboard shortcut.
 
 ## Commands and Keyboard Shortcuts
 
-All BaseJump commands are available in the Command Palette under the `BaseJump:` category and can be bound to keyboard shortcuts in **Preferences → Keyboard Shortcuts**.
+All BaseJump commands are available in the Command Palette under the `BaseJump:` category. There are no default keyboard shortcuts — to assign one, open **Preferences → Keyboard Shortcuts** and type `BaseJump` in the filter bar to see all available commands.
 
 | Command | ID | Description |
 |---|---|---|
@@ -130,7 +118,7 @@ All BaseJump commands are available in the Command Palette under the `BaseJump:`
 | Convert to Hexadecimal | `basejump.convertToHex` | Direct conversion to hexadecimal |
 | Convert to Hexadecimal (bytes) | `basejump.convertToHexDelimited` | Direct conversion to hexadecimal with byte separators |
 
-The direct-conversion commands (`convertToBinary`, `convertToHex`, etc.) are well suited for keyboard shortcuts — they operate immediately on the token at the cursor(s) or seelcted block(s) only opening a menu if source bases are ambiguous.
+The direct-conversion commands (`convertToBinary`, `convertToHex`, etc.) are well suited for keyboard shortcuts — they operate immediately on the token at the cursor(s) or selected block(s) only opening a menu if source bases are ambiguous.
 
 ## Settings
 
@@ -173,3 +161,10 @@ Built-in language defaults (applied automatically without any configuration): C/
 ## License
 
 See LICENSE for details.
+
+## AI Disclaimer
+
+- **YES** This extension was 100% vibe coded, including project scaffolding, design, icons, implementation, test, and documentation. The only exception might be this **AI Disclaimer** section.
+- **YES** I have 40 years of SW Dev experience that I lean on to "Guide the Vibe (tm)".
+- **NO** I have not looked at the code...at all.  It might be a hairy scary mess in there but all my tests pass. And I keep the tests up to date.
+- **YES** I wrote this extension primarily for myself and my team at work to help us be more productive because we deal in hex, binary and decimal constants all the time (not so much octal though...)
