@@ -2,9 +2,13 @@
   "name": "basejump",
   "displayName": "BaseJump",
   "description": "Convert and copy numeric values between bases (hex, decimal, binary, octal)",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "icon": "img/basejump-icon.png",
   "publisher": "KevinMills",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:mgfarmer/BaseJump.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
