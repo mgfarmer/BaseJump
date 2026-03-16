@@ -2,7 +2,7 @@
   "name": "basejump",
   "displayName": "BaseJump",
   "description": "Convert and copy numeric values between bases (hex, decimal, binary, octal)",
-  "version": "0.0.2",
+  "version": "0.0.5",
   "icon": "img/basejump-icon.png",
   "publisher": "KevinMills",
   "repository": {
@@ -370,6 +370,12 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Show the **Convert to Hexadecimal (bytes)** command in the editor context menu (both submenu and top-level layouts)."
+        },
+        "basejump.statusBarFavorites": {
+          "order": 22,
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "When enabled, each unique conversion target in your favorites list appears as a status bar button on the left side. If there are more than 3 unique targets, a single **$(zap) BaseJump** button is shown instead — clicking it opens a pop-up menu with all favorite targets listed. Clicking a button runs the equivalent **Convert To** command at the cursor. Manage favorites via the ★ button in the **Convert Number** quick-pick."
         }
       }
     }

@@ -17,6 +17,28 @@ import {
 
 const FAVORITES_KEY = "basejump.favorites";
 
+// --- Status bar ---
+
+const STATUS_BAR_LABELS: Record<string, string> = {
+  Binary: "→Bin",
+  "Binary (nibbles)": "→Bin·",
+  Octal: "→Oct",
+  Decimal: "→Dec",
+  "Decimal (thousands)": "→Dec·",
+  Hexadecimal: "→Hex",
+  "Hexadecimal (bytes)": "→Hex·",
+};
+
+const TARGET_TO_COMMAND: Record<string, string> = {
+  Binary: "basejump.convertToBinary",
+  "Binary (nibbles)": "basejump.convertToBinaryDelimited",
+  Octal: "basejump.convertToOctal",
+  Decimal: "basejump.convertToDecimal",
+  "Decimal (thousands)": "basejump.convertToDecimalDelimited",
+  Hexadecimal: "basejump.convertToHex",
+  "Hexadecimal (bytes)": "basejump.convertToHexDelimited",
+};
+
 // --- Delimiter ---
 
 function getDelimiterChar(
@@ -795,6 +817,16 @@ export function activate(context: vscode.ExtensionContext) {
   };
   const starButtons = { full: starFull, empty: starEmpty };
 
+  let statusBarItems: vscode.StatusBarItem[] = [];
+  context.subscriptions.push({
+    dispose: () => {
+      for (const i of statusBarItems) {
+        i.dispose();
+      }
+      statusBarItems = [];
+    },
+  });
+
   const disposable = vscode.commands.registerCommand(
     "basejump.convertNumber",
     async () => {
@@ -1017,6 +1049,7 @@ export function activate(context: vscode.ExtensionContext) {
             return { ...i, buttons: newButtons };
           });
           qp.items = updated;
+          updateStatusBarItems();
         }
       });
 
@@ -1236,12 +1269,87 @@ export function activate(context: vscode.ExtensionContext) {
     );
   }
 
-  // Initialize context menu keys and keep them in sync with settings
+  // --- Status bar helpers ---
+
+  function getStatusBarTargets(): string[] {
+    const favs = getFavorites(context);
+    const seen = new Set<string>();
+    for (const key of favs) {
+      const parts = key.split("\u2192");
+      if (parts.length === 2 && TARGET_TO_COMMAND[parts[1]]) {
+        seen.add(parts[1]);
+      }
+    }
+    return BASE_ORDER.filter((t) => seen.has(t));
+  }
+
+  function updateStatusBarItems(): void {
+    for (const item of statusBarItems) {
+      item.dispose();
+    }
+    statusBarItems = [];
+    const cfg = vscode.workspace.getConfiguration("basejump");
+    if (!cfg.get<boolean>("statusBarFavorites", false)) {
+      return;
+    }
+    const targets = getStatusBarTargets();
+    if (targets.length === 0) {
+      return;
+    }
+    if (targets.length <= 3) {
+      for (const target of targets) {
+        const item = vscode.window.createStatusBarItem(
+          vscode.StatusBarAlignment.Left,
+          0,
+        );
+        item.text = STATUS_BAR_LABELS[target] ?? target;
+        item.tooltip = `Convert to ${target} (BaseJump)`;
+        item.command = TARGET_TO_COMMAND[target];
+        item.show();
+        statusBarItems.push(item);
+      }
+    } else {
+      const item = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Left,
+        0,
+      );
+      item.text = "$(zap) BaseJump";
+      item.tooltip = "BaseJump favorites";
+      item.command = "basejump.statusBarMenu";
+      item.show();
+      statusBarItems.push(item);
+    }
+  }
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("basejump.statusBarMenu", async () => {
+      const targets = getStatusBarTargets();
+      interface TargetItem extends vscode.QuickPickItem {
+        target: string;
+      }
+      const items: TargetItem[] = targets.map((t) => ({
+        label: STATUS_BAR_LABELS[t] ?? t,
+        description: t,
+        target: t,
+      }));
+      const picked = await vscode.window.showQuickPick(items, {
+        title: "BaseJump \u2014 Convert To",
+        placeHolder: "Select a conversion target",
+      });
+      if (picked) {
+        await vscode.commands.executeCommand(TARGET_TO_COMMAND[picked.target]);
+      }
+    }),
+  );
+
+  // Initialize context menu keys and status bar, and keep them in sync with settings
+  updateStatusBarItems();
   updateMenuContextKeys();
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("basejump")) {
         updateMenuContextKeys();
+        updateStatusBarItems();
       }
     }),
   );
