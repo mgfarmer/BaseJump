@@ -20,13 +20,13 @@ const FAVORITES_KEY = "basejump.favorites";
 // --- Status bar ---
 
 const STATUS_BAR_LABELS: Record<string, string> = {
-  Binary: "→Bin",
-  "Binary (nibbles)": "→Bin·",
-  Octal: "→Oct",
-  Decimal: "→Dec",
-  "Decimal (thousands)": "→Dec·",
-  Hexadecimal: "→Hex",
-  "Hexadecimal (bytes)": "→Hex·",
+  Binary: "Bin",
+  "Binary (nibbles)": "Bin·",
+  Octal: "Oct",
+  Decimal: "Dec",
+  "Decimal (thousands)": "Dec·",
+  Hexadecimal: "Hex",
+  "Hexadecimal (bytes)": "Hex·",
 };
 
 const TARGET_TO_COMMAND: Record<string, string> = {
@@ -369,18 +369,21 @@ function buildItems(
     }
   }
 
-  // Sort: favorites first, then non-favorites. Within each tier, order depends on grouping.
+  // Sort: by grouping order only (favorites appear in both the ★ section and their normal group).
   items.sort((a, b) => {
-    const aFav = isFavorite(context, a.conversionKey) ? 0 : 1;
-    const bFav = isFavorite(context, b.conversionKey) ? 0 : 1;
-    if (aFav !== bFav) {
-      return aFav - bFav;
-    }
     if (grouping === "byTarget") {
-      const tCmp =
-        BASE_ORDER.indexOf(a.targetBase) - BASE_ORDER.indexOf(b.targetBase);
-      if (tCmp !== 0) return tCmp;
-      return a.sourceBase.localeCompare(b.sourceBase);
+      // Primary: family of target (Binary / Decimal / Hexadecimal / Octal)
+      const fCmp =
+        BASE_ORDER.indexOf(baseFamilyName(a.targetBase)) -
+        BASE_ORDER.indexOf(baseFamilyName(b.targetBase));
+      if (fCmp !== 0) return fCmp;
+      // Secondary: source base (so Decimal→Binary and Decimal→Binary(nibbles) stay together)
+      const sCmp = a.sourceBase.localeCompare(b.sourceBase);
+      if (sCmp !== 0) return sCmp;
+      // Tertiary: plain before delimited within same source+family
+      return (
+        BASE_ORDER.indexOf(a.targetBase) - BASE_ORDER.indexOf(b.targetBase)
+      );
     } else {
       const sCmp = a.sourceBase.localeCompare(b.sourceBase);
       if (sCmp !== 0) return sCmp;
@@ -390,15 +393,31 @@ function buildItems(
     }
   });
 
-  // Insert separators between the Favorites group and each group.
+  // Build separator list: ★ Favorites section first (if any), then all items in normal groups.
   const withSeparators: ConversionQuickPickItem[] = [];
+
+  const favItems = items.filter((i) => isFavorite(context, i.conversionKey));
+  if (favItems.length > 0) {
+    withSeparators.push({
+      label: "\u2605 Favorites",
+      kind: vscode.QuickPickItemKind.Separator,
+      convertedValues: [],
+      sourceBase: "",
+      targetBase: "",
+      conversionKey: "",
+      buttons: [],
+    });
+    for (const item of favItems) {
+      withSeparators.push(item);
+    }
+  }
+
   let lastGroup: string | null = null;
   for (const item of items) {
-    const group = isFavorite(context, item.conversionKey)
-      ? "\u2605 Favorites"
-      : grouping === "byTarget"
-        ? `To ${item.targetBase}`
-        : `From ${item.sourceBase}`;
+    const group =
+      grouping === "byTarget"
+        ? `To ${baseFamilyName(item.targetBase)}`
+        : `From ${baseFamilyName(item.sourceBase)}`;
     if (group !== lastGroup) {
       withSeparators.push({
         label: group,
@@ -551,7 +570,10 @@ function scanRangeForTokens(
 
 // --- Direct convert command ---
 
-async function convertToCommand(targetName: string): Promise<void> {
+async function convertToCommand(
+  targetName: string,
+  action: "convert" | "copy" | "comment" = "convert",
+): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     vscode.window.showErrorMessage("No active editor found");
@@ -686,8 +708,12 @@ async function convertToCommand(targetName: string): Promise<void> {
     }
   }
 
-  // Step 4: Convert and collect edits.
-  const edits: Array<{ range: vscode.Range; newText: string }> = [];
+  // Step 4: Compute converted values.
+  const convertedResults: Array<{
+    range: vscode.Range;
+    text: string;
+    converted: string;
+  }> = [];
   for (const { range, source, text } of resolved) {
     const sourceHasPrefix = /^0[bxo]/i.test(text.trim());
     const addPrefix = alwaysPrefix || sourceHasPrefix;
@@ -699,19 +725,65 @@ async function convertToCommand(targetName: string): Promise<void> {
       decimalDelimChar,
     );
     if (converted === undefined) continue;
-    if (converted === text.trim()) continue; // silent no-op
-    edits.push({ range, newText: converted });
+    convertedResults.push({ range, text, converted });
   }
 
+  if (convertedResults.length === 0) return;
+
+  // Step 5: Apply action.
+  if (action === "copy") {
+    const clipText = convertedResults.map((r) => r.converted).join("\n");
+    await vscode.env.clipboard.writeText(clipText);
+    if (convertedResults.length === 1) {
+      vscode.window.showInformationMessage(
+        `Copied: ${convertedResults[0].converted}`,
+      );
+    } else {
+      vscode.window.showInformationMessage(
+        `Copied ${convertedResults.length} values to clipboard`,
+      );
+    }
+    return;
+  }
+
+  if (action === "comment") {
+    const style = getCommentStyle(editor.document.languageId);
+    const annotTokens: AnnotationToken[] = convertedResults.map((r) => ({
+      lineNum: r.range.start.line,
+      lineIndent:
+        editor.document.lineAt(r.range.start.line).text.match(/^(\s*)/)?.[1] ??
+        "",
+      text: r.text,
+    }));
+    const insertions = buildAnnotationInsertions(
+      annotTokens,
+      convertedResults.map((r) => r.converted),
+      style,
+    );
+    const applied = await editor.edit((eb) => {
+      for (const { lineNum, commentText } of insertions) {
+        eb.insert(new vscode.Position(lineNum, 0), commentText);
+      }
+    });
+    if (!applied) {
+      vscode.window.showInformationMessage(
+        "Editor is read-only \u2014 cannot insert note",
+      );
+    }
+    return;
+  }
+
+  // action === "convert"
+  const edits = convertedResults.filter((r) => r.converted !== r.text.trim());
   if (edits.length === 0) return;
 
   const applied = await editor.edit((eb) => {
     for (const e of edits) {
-      eb.replace(e.range, e.newText);
+      eb.replace(e.range, e.converted);
     }
   });
   if (!applied) {
-    const clipText = edits.map((e) => e.newText).join("\n");
+    const clipText = edits.map((e) => e.converted).join("\n");
     await vscode.env.clipboard.writeText(clipText);
     const msg =
       edits.length === 1
@@ -1007,17 +1079,15 @@ export function activate(context: vscode.ExtensionContext) {
 
       // --- Build and show QuickPick ---
       const qp = vscode.window.createQuickPick<ConversionQuickPickItem>();
-      const defaultHint =
-        defaultAction === "replaceInEditor"
-          ? "Enter replaces in editor  |  [copy] copy  |  [comment] note  |  [star] toggle favorite"
-          : defaultAction === "insertComment"
-            ? "Enter inserts comment  |  [copy] copy  |  [replace] replace  |  [star] toggle favorite"
-            : "Enter copies to clipboard  |  [replace] replace  |  [comment] note  |  [star] toggle favorite";
       const titleSource =
         tokens.length === 1
           ? `"${tokens[0].text}"`
           : `${tokens.length} selections`;
-      qp.title = `Convert: ${titleSource} (${commonBaseNames.join(", ")})  ·  ${defaultHint}`;
+      const titleBases =
+        commonBaseNames.length === 1
+          ? commonBaseNames[0]
+          : `ambiguous: ${commonBaseNames.join(", ")}`;
+      qp.title = `Convert: ${titleSource} (${titleBases})`;
       qp.placeholder = "Select a conversion";
       qp.items = items;
 
@@ -1296,15 +1366,32 @@ export function activate(context: vscode.ExtensionContext) {
     if (targets.length === 0) {
       return;
     }
+    const clickAction = cfg.get<string>("statusBarClickAction", "convert");
+    const actionIcon =
+      clickAction === "copy"
+        ? "$(copy)"
+        : clickAction === "comment"
+          ? "$(comment)"
+          : "$(replace)";
+    const makeTooltip = (target: string): string =>
+      clickAction === "copy"
+        ? `Copy ${target} conversion to clipboard (BaseJump)`
+        : clickAction === "comment"
+          ? `Add comment with ${target} conversion in editor (BaseJump)`
+          : `Convert to ${target} in editor (BaseJump)`;
     if (targets.length <= 3) {
       for (const target of targets) {
         const item = vscode.window.createStatusBarItem(
           vscode.StatusBarAlignment.Left,
           0,
         );
-        item.text = STATUS_BAR_LABELS[target] ?? target;
-        item.tooltip = `Convert to ${target} (BaseJump)`;
-        item.command = TARGET_TO_COMMAND[target];
+        item.text = `${actionIcon} ${STATUS_BAR_LABELS[target] ?? target}`;
+        item.tooltip = makeTooltip(target);
+        item.command = {
+          command: "basejump.statusBarExecute",
+          title: "BaseJump",
+          arguments: [target],
+        };
         item.show();
         statusBarItems.push(item);
       }
@@ -1313,13 +1400,27 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.StatusBarAlignment.Left,
         0,
       );
-      item.text = "$(zap) BaseJump";
+      item.text = `${actionIcon} BaseJump`;
       item.tooltip = "BaseJump favorites";
       item.command = "basejump.statusBarMenu";
       item.show();
       statusBarItems.push(item);
     }
   }
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "basejump.statusBarExecute",
+      async (target: string) => {
+        const action = vscode.workspace
+          .getConfiguration("basejump")
+          .get<
+            "convert" | "copy" | "comment"
+          >("statusBarClickAction", "convert");
+        await convertToCommand(target, action);
+      },
+    ),
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("basejump.statusBarMenu", async () => {
@@ -1337,7 +1438,10 @@ export function activate(context: vscode.ExtensionContext) {
         placeHolder: "Select a conversion target",
       });
       if (picked) {
-        await vscode.commands.executeCommand(TARGET_TO_COMMAND[picked.target]);
+        await vscode.commands.executeCommand(
+          "basejump.statusBarExecute",
+          picked.target,
+        );
       }
     }),
   );

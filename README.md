@@ -183,6 +183,7 @@ When multiple cursors or a block selection produce tokens on the same line, only
 | `basejump.menuShowConvertToHex` | `false` | Show the **Convert to Hexadecimal** command in the context menu (applies in both layout modes). |
 | `basejump.menuShowConvertToHexDelimited` | `false` | Show the **Convert to Hexadecimal (bytes)** command in the context menu (applies in both layout modes). |
 | `basejump.statusBarFavorites` | `false` | When enabled, each unique conversion target in your favorites list appears as a status bar button on the left side. If there are more than 3 unique targets, a single **⚡ BaseJump** button is shown instead — clicking it opens a pop-up menu with all favorite targets. Clicking a button runs the equivalent Convert To command at the cursor. Manage favorites via ★ in **Convert Number**. |
+| `basejump.statusBarClickAction` | `convert` | Action performed when clicking a status bar favorite button: `convert` (replace in editor), `copy` (copy to clipboard), or `comment` (insert comment above line). The button icon updates to match: `$(replace)`, `$(copy)`, or `$(comment)`. Only applies when `statusBarFavorites` is enabled. |
 
 The `basejump.fallbackDelimiter` setting is language-overridable, so you can set a different separator per language in your `settings.json`:
 

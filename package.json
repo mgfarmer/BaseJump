@@ -376,6 +376,27 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "When enabled, each unique conversion target in your favorites list appears as a status bar button on the left side. If there are more than 3 unique targets, a single **$(zap) BaseJump** button is shown instead — clicking it opens a pop-up menu with all favorite targets listed. Clicking a button runs the equivalent **Convert To** command at the cursor. Manage favorites via the ★ button in the **Convert Number** quick-pick."
+        },
+        "basejump.statusBarClickAction": {
+          "order": 23,
+          "type": "string",
+          "enum": [
+            "convert",
+            "copy",
+            "comment"
+          ],
+          "enumItemLabels": [
+            "Convert (replace in editor)",
+            "Copy to Clipboard",
+            "Insert Comment"
+          ],
+          "markdownEnumDescriptions": [
+            "**Convert** — Replace the token in the editor with the converted value. _(default)_",
+            "**Copy to Clipboard** — Copy the converted value to the clipboard without modifying the editor.",
+            "**Insert Comment** — Insert a language-appropriate comment line above the token with the converted value."
+          ],
+          "default": "convert",
+          "markdownDescription": "The action performed when clicking a BaseJump status bar button (or selecting from the pop-up menu when more than 3 favorites are active). Has no effect when `basejump.statusBarFavorites` is disabled."
         }
       }
     }
